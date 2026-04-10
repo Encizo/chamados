@@ -126,6 +126,44 @@ python run.py
 
 Acesse `http://127.0.0.1:5000`.
 
+## Docker
+
+### Estrutura de persistencia
+
+Para nao perder configuracoes ao reiniciar o container, o compose monta volumes para:
+
+- `./data` -> banco local SQLite (`/app/data`)
+- `./credenciais` -> credenciais Google (`/app/credenciais`)
+- `./.env` -> configuracoes locais (`/app/.env`)
+
+### Subir com Docker Compose
+
+1. Garanta que o `.env` exista na raiz (pode copiar de `.env.example`).
+2. Garanta que `credenciais/service-account.json` exista.
+3. Suba o app:
+
+```bash
+docker compose up --build -d
+```
+
+4. Acesse:
+
+```text
+http://localhost:5000
+```
+
+### Parar
+
+```bash
+docker compose down
+```
+
+### Gerenciar contas admin via script no container
+
+```bash
+docker compose exec chamados-app python manage_admin.py
+```
+
 Ao abrir, o sistema redireciona para a tela de login administrativo.
 
 ## Login administrativo
