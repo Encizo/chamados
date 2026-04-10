@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 
 from google.auth.exceptions import GoogleAuthError
 from google.oauth2.service_account import Credentials
@@ -28,17 +29,16 @@ class SheetsService:
 
         service = self._build_client(readonly=True)
 
+        request_range = self._normalized_sheet_range()
         try:
             result = (
                 service.spreadsheets()
                 .values()
-                .get(spreadsheetId=self.sheet_id, range=self.sheet_range)
+                .get(spreadsheetId=self.sheet_id, range=request_range)
                 .execute()
             )
         except HttpError as exc:
             status_code = getattr(exc.resp, "status", "desconhecido")
-            reason = exc.reason or "erro de permissao"
-
             details = ""
             if getattr(exc, "content", None):
                 try:
@@ -47,12 +47,24 @@ class SheetsService:
                 except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
                     details = ""
 
-            if details:
-                message = f"Google Sheets API ({status_code}): {details}"
+            if status_code == 400 and "Unable to parse range" in details:
+                fallback_range = self._resolve_valid_sheet_range(service)
+                if fallback_range and fallback_range != request_range:
+                    result = (
+                        service.spreadsheets()
+                        .values()
+                        .get(spreadsheetId=self.sheet_id, range=fallback_range)
+                        .execute()
+                    )
+                else:
+                    raise SheetsServiceError(f"Google Sheets API (400): {details}") from exc
             else:
-                message = f"Google Sheets API ({status_code}): {reason}"
-
-            raise SheetsServiceError(message) from exc
+                reason = exc.reason or "erro de permissao"
+                if details:
+                    message = f"Google Sheets API ({status_code}): {details}"
+                else:
+                    message = f"Google Sheets API ({status_code}): {reason}"
+                raise SheetsServiceError(message) from exc
 
         values = result.get("values", [])
 
@@ -85,6 +97,55 @@ class SheetsService:
         tickets.sort(key=lambda ticket: ticket.row_number, reverse=True)
 
         return tickets
+
+    def _resolve_valid_sheet_range(self, service) -> str | None:
+        try:
+            meta = service.spreadsheets().get(spreadsheetId=self.sheet_id).execute()
+        except Exception:
+            return None
+
+        configured_name = self._get_sheet_title()
+        configured_norm = self._normalize_text(configured_name)
+
+        sheet_titles = [
+            str(sheet.get("properties", {}).get("title", ""))
+            for sheet in meta.get("sheets", [])
+            if sheet.get("properties", {}).get("title")
+        ]
+        if not sheet_titles:
+            return None
+
+        selected_title = None
+        for title in sheet_titles:
+            if title == configured_name:
+                selected_title = title
+                break
+
+        if not selected_title:
+            for title in sheet_titles:
+                if self._normalize_text(title) == configured_norm:
+                    selected_title = title
+                    break
+
+        if not selected_title and len(sheet_titles) == 1:
+            selected_title = sheet_titles[0]
+
+        if not selected_title:
+            return None
+
+        cell_range = "A:E"
+        if "!" in self.sheet_range:
+            _, right = self.sheet_range.split("!", maxsplit=1)
+            cell_range = right.strip() or "A:E"
+
+        escaped_title = selected_title.replace("'", "''")
+        return f"'{escaped_title}'!{cell_range}"
+
+    @staticmethod
+    def _normalize_text(value: str) -> str:
+        text = unicodedata.normalize("NFD", (value or ""))
+        text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+        return text.strip().lower()
 
     def update_ticket_status(self, row_number: int, status: str) -> None:
         if row_number < 2:
@@ -158,7 +219,20 @@ class SheetsService:
             ) from exc
 
     def _get_sheet_name(self) -> str:
-        return self.sheet_range.split("!", maxsplit=1)[0]
+        raw_name = self.sheet_range.split("!", maxsplit=1)[0].strip()
+        if raw_name.startswith("'") and raw_name.endswith("'"):
+            return raw_name
+
+        escaped = raw_name.replace("'", "''")
+        return f"'{escaped}'"
+
+    def _normalized_sheet_range(self) -> str:
+        value = (self.sheet_range or "").strip()
+        if "!" not in value:
+            return value
+
+        _, cell_range = value.split("!", maxsplit=1)
+        return f"{self._get_sheet_name()}!{cell_range.strip()}"
 
     def _get_sheet_title(self) -> str:
         return self._get_sheet_name().strip("'\"")
