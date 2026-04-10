@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}{{ config.APP_BRAND_NAME }}{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+    {% block head_extras %}{% endblock %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+    {% set theme_vars = config.get('APP_THEME_VARS', {}) %}
+    <style>
+        :root {
+            --bg: {{ theme_vars.get('bg', '#f7f9fb') }};
+            --surface: {{ theme_vars.get('surface', '#ffffff') }};
+            --surface-soft: {{ theme_vars.get('surface-soft', '#f2f4f6') }};
+            --line: {{ theme_vars.get('line', '#d8e0e6') }};
+            --ink: {{ theme_vars.get('ink', '#1a1f24') }};
+            --muted: {{ theme_vars.get('muted', '#576772') }};
+            --primary: {{ theme_vars.get('primary', '#005eb8') }};
+            --primary-deep: {{ theme_vars.get('primary-deep', '#00478d') }};
+            --primary-soft: {{ theme_vars.get('primary-soft', '#e8f1ff') }};
+            --accent-ok: {{ theme_vars.get('accent-ok', '#0f7c4a') }};
+            --accent-warn: {{ theme_vars.get('accent-warn', '#a96a0f') }};
+            --accent-open: {{ theme_vars.get('accent-open', '#1f5f66') }};
+            --accent-ok-strong: {{ theme_vars.get('accent-ok-strong', '#0a5d36') }};
+            --accent-warn-strong: {{ theme_vars.get('accent-warn-strong', '#7a560b') }};
+            --accent-open-strong: {{ theme_vars.get('accent-open-strong', '#154247') }};
+            --status-open: {{ theme_vars.get('status-open', '#576772') }};
+            --status-open-soft: {{ theme_vars.get('status-open-soft', '#edf1f4') }};
+            --status-open-strong: {{ theme_vars.get('status-open-strong', '#404c56') }};
+            --ok-soft: {{ theme_vars.get('ok-soft', '#e8f6ef') }};
+            --warn-soft: {{ theme_vars.get('warn-soft', '#fff4df') }};
+            --open-soft: {{ theme_vars.get('open-soft', '#e6f4f6') }};
+            --danger: {{ theme_vars.get('danger', '#a63d2f') }};
+            --danger-soft: {{ theme_vars.get('danger-soft', '#f7e6e2') }};
+            --info: {{ theme_vars.get('info', '#00478d') }};
+            --info-soft: {{ theme_vars.get('info-soft', '#e8f1ff') }};
+        }
+    </style>
+</head>
+<body>
+    <div class="layout-root">
+        <aside class="sidebar">
+            <div class="brand-panel">
+                <span class="brand-kicker">{{ config.APP_BRAND_SHORT }}</span>
+                <strong>{{ config.APP_BRAND_NAME }}</strong>
+            </div>
+
+            <nav class="side-nav">
+                <a href="{{ url_for('tickets.dashboard') }}" class="{% if request.path == '/' %}active{% endif %}">
+                    <span class="material-symbols-outlined">dashboard</span>
+                    Dashboard
+                </a>
+                <a href="{{ url_for('tickets.tickets_page') }}" class="{% if request.path.startswith('/chamados') %}active{% endif %}">
+                    <span class="material-symbols-outlined">confirmation_number</span>
+                    Tickets
+                </a>
+                <a href="{{ url_for('tickets.settings_page') }}" class="{% if request.path.startswith('/configuracoes') %}active{% endif %}">
+                    <span class="material-symbols-outlined">settings</span>
+                    Settings
+                </a>
+                <a href="{{ url_for('tickets.analytics_page') }}" class="{% if request.path.startswith('/analytics') %}active{% endif %}">
+                    <span class="material-symbols-outlined">monitoring</span>
+                    Analytics
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button id="open-logout-modal" type="button" class="side-logout-btn">
+                    <span class="material-symbols-outlined">logout</span>
+                    Logout
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-area">
+            <header class="main-topbar">
+                <div></div>
+                <div class="topbar-actions">
+                    <span id="open-tutorial-btn" class="material-symbols-outlined" role="button" tabindex="0" aria-label="Abrir tutorial rapido">help_outline</span>
+                    <div class="profile-badge">TI</div>
+                </div>
+            </header>
+            <section class="app-shell">{% block content %}{% endblock %}</section>
+        </main>
+    </div>
+
+    <div id="tutorial-modal" class="modal-overlay" hidden>
+        <div class="modal-card tutorial-card">
+            <h3>Tutorial rapido do sistema</h3>
+            <p>Este software centraliza o gerenciamento de chamados, com leitura de dados de planilha e operacao rapida por base local.</p>
+            <ul class="tutorial-list">
+                <li><strong>Dashboard:</strong> visao geral da operacao, status da integracao e chamados recentes.</li>
+                <li><strong>Tickets:</strong> gerencie status, motivo de conclusao e exclusoes com atualizacao rapida.</li>
+                <li><strong>Analytics:</strong> acompanhe indicadores, locais, solicitantes e exporte relatorios em PDF.</li>
+                <li><strong>Settings:</strong> configure integracao, identidade visual e motivos de conclusao.</li>
+            </ul>
+            <div class="modal-actions">
+                <button id="close-tutorial-btn" type="button" class="primary-btn">Entendi</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="logout-modal" class="modal-overlay" hidden>
+        <div class="modal-card">
+            <h3>Confirmar logout</h3>
+            <p>Tem certeza que deseja sair do painel?</p>
+            <div class="modal-actions">
+                <button id="logout-cancel" type="button" class="modal-btn-secondary">Cancelar</button>
+                <form method="post" action="{{ url_for('tickets.logout_page') }}">
+                    <button type="submit" class="primary-btn">Confirmar logout</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <script>
+        window.showToast = function showToast(message, type = "info", duration = 3400) {
+            if (!message) {
+                return;
+            }
+
+            const container = document.getElementById("toast-container");
+            if (!container) {
+                return;
+            }
+
+            const toast = document.createElement("div");
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+
+            requestAnimationFrame(() => {
+                toast.classList.add("toast-visible");
+            });
+
+            setTimeout(() => {
+                toast.classList.remove("toast-visible");
+                setTimeout(() => toast.remove(), 220);
+            }, duration);
+        };
+
+        (function setupTutorialModal() {
+            const openBtn = document.getElementById("open-tutorial-btn");
+            const modal = document.getElementById("tutorial-modal");
+            const closeBtn = document.getElementById("close-tutorial-btn");
+
+            if (!openBtn || !modal || !closeBtn) {
+                return;
+            }
+
+            const closeModal = () => {
+                modal.hidden = true;
+                document.body.classList.remove("modal-open");
+                document.body.style.paddingRight = "";
+            };
+
+            openBtn.addEventListener("click", () => {
+                const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+                if (scrollbarWidth > 0) {
+                    document.body.style.paddingRight = `${scrollbarWidth}px`;
+                }
+                modal.hidden = false;
+                document.body.classList.add("modal-open");
+            });
+
+            openBtn.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+                    if (scrollbarWidth > 0) {
+                        document.body.style.paddingRight = `${scrollbarWidth}px`;
+                    }
+                    modal.hidden = false;
+                    document.body.classList.add("modal-open");
+                }
+            });
+
+            closeBtn.addEventListener("click", closeModal);
+
+            modal.addEventListener("click", (event) => {
+                if (event.target === modal) {
+                    closeModal();
+                }
+            });
+
+            document.addEventListener("keydown", (event) => {
+                if (event.key === "Escape" && !modal.hidden) {
+                    closeModal();
+                }
+            });
+        })();
+
+        (function setupLogoutModal() {
+            const openBtn = document.getElementById("open-logout-modal");
+            const modal = document.getElementById("logout-modal");
+            const cancelBtn = document.getElementById("logout-cancel");
+            if (!openBtn || !modal || !cancelBtn) {
+                return;
+            }
+
+            const closeModal = () => {
+                modal.hidden = true;
+                document.body.classList.remove("modal-open");
+                document.body.style.paddingRight = "";
+            };
+
+            openBtn.addEventListener("click", () => {
+                const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+                if (scrollbarWidth > 0) {
+                    document.body.style.paddingRight = `${scrollbarWidth}px`;
+                }
+                modal.hidden = false;
+                document.body.classList.add("modal-open");
+            });
+
+            cancelBtn.addEventListener("click", closeModal);
+            modal.addEventListener("click", (event) => {
+                if (event.target === modal) {
+                    closeModal();
+                }
+            });
+        })();
+    </script>
+
+    {% block page_scripts %}{% endblock %}
+</body>
+</html>

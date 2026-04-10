@@ -1,0 +1,933 @@
+{% extends "base.html" %}
+
+{% block title %}{{ branding.tickets_title }}{% endblock %}
+
+{% block head_extras %}
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    line: "var(--line)",
+                    "surface-card": "var(--surface)",
+                    ink: "var(--ink)",
+                    muted: "var(--muted)",
+                    "primary-deep": "var(--primary-deep)",
+                    "open-tone": "var(--status-open-strong)",
+                    "warn-tone": "var(--accent-warn-strong)",
+                    "ok-tone": "var(--accent-ok-strong)"
+                }
+            }
+        }
+    };
+
+    const localColorMap = {{ local_color_map|tojson }};
+
+    function localColorStyle(localName) {
+        const key = (localName || "").trim();
+        const color = localColorMap[key];
+        if (!color) {
+            return {};
+        }
+        return { color, fontWeight: "800" };
+    }
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto space-y-6">
+    <section class="page-hero">
+        <div class="page-hero-content">
+            <div>
+                <p class="page-hero-kicker">{{ branding.org_name }}</p>
+                <h1>{{ branding.tickets_title }}</h1>
+                <p class="page-hero-subtitle">{{ branding.tickets_subtitle }}</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <a href="{{ url_for('tickets.tickets_monitor_page') }}" target="_blank" rel="noopener" class="page-hero-chip">
+                    <span class="material-symbols-outlined">tv</span>
+                    Modo Monitor
+                </a>
+                <div class="page-hero-chip">
+                    <span class="material-symbols-outlined">wifi_tethering</span>
+                    Sincronizacao ativa
+                </div>
+            </div>
+        </div>
+    </section>
+
+<section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <article class="rounded-2xl border border-line bg-surface-card p-5 shadow-sm">
+        <div class="mb-3 inline-flex rounded-xl p-2 text-primary-deep" style="background: var(--primary-soft, #e8f1ff);">
+            <span class="material-symbols-outlined">confirmation_number</span>
+        </div>
+        <p class="text-xs font-bold uppercase tracking-wide text-muted">Total</p>
+        <p id="stat-total" class="mt-1 text-3xl font-black text-ink">{{ status_summary.total }}</p>
+    </article>
+
+    <article class="rounded-2xl border border-line bg-surface-card p-5 shadow-sm">
+        <div class="mb-3 inline-flex rounded-xl p-2 text-open-tone" style="background: var(--status-open-soft, #edf1f4);">
+            <span class="material-symbols-outlined">draft_orders</span>
+        </div>
+        <p class="text-xs font-bold uppercase tracking-wide text-muted">Em aberto</p>
+        <p id="stat-aberto" class="mt-1 text-3xl font-black text-open-tone">{{ status_summary.aberto }}</p>
+    </article>
+
+    <article class="rounded-2xl border border-line bg-surface-card p-5 shadow-sm">
+        <div class="mb-3 inline-flex rounded-xl p-2 text-warn-tone" style="background: var(--warn-soft, #fff4df);">
+            <span class="material-symbols-outlined">manage_history</span>
+        </div>
+        <p class="text-xs font-bold uppercase tracking-wide text-muted">Em andamento</p>
+        <p id="stat-andamento" class="mt-1 text-3xl font-black text-warn-tone">{{ status_summary.andamento }}</p>
+    </article>
+
+    <article class="rounded-2xl border border-line bg-surface-card p-5 shadow-sm">
+        <div class="mb-3 inline-flex rounded-xl p-2 text-ok-tone" style="background: var(--ok-soft, #e8f6ef);">
+            <span class="material-symbols-outlined">task_alt</span>
+        </div>
+        <p class="text-xs font-bold uppercase tracking-wide text-muted">Concluidos</p>
+        <p id="stat-concluido" class="mt-1 text-3xl font-black text-ok-tone">{{ status_summary.concluido }}</p>
+    </article>
+</section>
+
+<section class="table-card">
+    <div class="table-head">
+        <h2>Chamados registrados</h2>
+        <div class="table-head-meta">
+            <span id="new-tickets-chip" class="new-tickets-chip" hidden>0 novos</span>
+            <span id="table-count">{{ pagination.total_items if pagination else tickets|length }} itens</span>
+        </div>
+    </div>
+
+    <div class="filters-row">
+        <button type="button" class="filter-btn active" data-filter="todos">Todos</button>
+        <button type="button" class="filter-btn" data-filter="Em aberto">Em aberto</button>
+        <button type="button" class="filter-btn" data-filter="Em andamento">Em andamento</button>
+        <button type="button" class="filter-btn" data-filter="Concluído">Concluídos</button>
+    </div>
+
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Data e hora</th>
+                    <th>Local</th>
+                    <th>Problema informado</th>
+                    <th>Solicitante</th>
+                    <th>Status</th>
+                    <th>Motivo de conclusao</th>
+                    <th>Atualizar status</th>
+                    <th>Excluir</th>
+                </tr>
+            </thead>
+            <tbody id="tickets-body">
+                {% for ticket in tickets %}
+                    <tr data-row-number="{{ ticket.row_number }}">
+                        <td>{{ ticket.row_number }}</td>
+                        <td>{{ ticket.data_hora }}</td>
+                        <td style="{% if local_color_map.get(ticket.local) %}color: {{ local_color_map.get(ticket.local) }}; font-weight: 800;{% endif %}">{{ ticket.local }}</td>
+                        <td>{{ ticket.problema }}</td>
+                        <td>{{ ticket.solicitante }}</td>
+                        <td>
+                            <span class="status-badge {% if ticket.status == 'Concluído' %}status-concluido{% elif ticket.status == 'Em andamento' %}status-em-andamento{% else %}status-em-aberto{% endif %}">{{ ticket.status }}</span>
+                        </td>
+                        <td>
+                            <select class="reason-select" data-row-number="{{ ticket.row_number }}">
+                                <option value="">Selecione</option>
+                                {% for reason in resolution_reasons %}
+                                    <option value="{{ reason }}" {% if ticket.resolution_reason == reason %}selected{% endif %}>{{ reason }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            <form method="post" action="{{ url_for('tickets.update_status', row_number=ticket.row_number) }}" class="status-form">
+                                <select name="status" class="status-select" data-row-number="{{ ticket.row_number }}">
+                                    <option value="Em aberto" {% if ticket.status == "Em aberto" %}selected{% endif %}>Em aberto</option>
+                                    <option value="Em andamento" {% if ticket.status == "Em andamento" %}selected{% endif %}>Em andamento</option>
+                                    <option value="Concluído" {% if ticket.status == "Concluído" %}selected{% endif %}>Concluído</option>
+                                </select>
+                            </form>
+                        </td>
+                        <td>
+                            <button type="button" class="delete-btn" data-row-number="{{ ticket.row_number }}">Excluir</button>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr data-empty="true">
+                        <td colspan="9" class="empty-state">Nenhum chamado encontrado.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if pagination and pagination.total_pages > 1 %}
+        <div class="pagination-row">
+            {% if pagination.page > 1 %}
+                <a class="filter-btn pagination-link" href="{{ url_for('tickets.tickets_page', page=pagination.page - 1) }}">Anterior</a>
+            {% else %}
+                <span class="filter-btn disabled">Anterior</span>
+            {% endif %}
+
+            <span class="pagination-label">Pagina {{ pagination.page }} de {{ pagination.total_pages }}</span>
+
+            {% if pagination.page < pagination.total_pages %}
+                <a class="filter-btn pagination-link" href="{{ url_for('tickets.tickets_page', page=pagination.page + 1) }}">Proxima</a>
+            {% else %}
+                <span class="filter-btn disabled">Proxima</span>
+            {% endif %}
+        </div>
+    {% endif %}
+</section>
+
+</div>
+
+<div id="delete-confirm-modal" class="modal-overlay" hidden>
+    <div class="modal-card">
+        <h3>Confirmar exclusao</h3>
+        <p>Deseja realmente excluir este chamado? Esta acao remove da planilha e do banco local.</p>
+        <div class="modal-actions">
+            <button id="delete-cancel-btn" type="button" class="modal-btn-secondary">Cancelar</button>
+            <button id="delete-confirm-btn" type="button" class="delete-btn">Excluir chamado</button>
+        </div>
+    </div>
+</div>
+
+{% block page_scripts %}
+<script>
+    {% if error %}
+        window.showToast({{ error|tojson }}, "error");
+    {% endif %}
+
+    const AUTO_REFRESH_MS = 8000;
+    const currentPage = {{ pagination.page if pagination else 1 }};
+    const pageSize = {{ pagination.page_size if pagination else 20 }};
+    const apiUrl = "{{ url_for('tickets.tickets_api') }}";
+    const updateStatusBaseUrl = "{{ url_for('tickets.update_status', row_number=0) }}";
+    const deleteTicketBaseUrl = "{{ url_for('tickets.delete_ticket', row_number=0) }}";
+    const updateReasonBaseUrl = "{{ url_for('tickets.update_ticket_reason', row_number=0) }}";
+    const resolutionReasons = {{ resolution_reasons|tojson }};
+    let globalSummary = {
+        total: {{ status_summary.total }},
+        aberto: {{ status_summary.aberto }},
+        andamento: {{ status_summary.andamento }},
+        concluido: {{ status_summary.concluido }},
+    };
+    let globalTotalItems = {{ pagination.total_items if pagination else tickets|length }};
+    const knownRows = new Set();
+    let currentFilter = "todos";
+    let pendingNewCount = 0;
+    let pendingDeleteRowNumber = null;
+    const rowSyncLocks = new Map();
+
+    function setError(message) {
+        if (!message) {
+            return;
+        }
+        window.showToast(message, "error");
+    }
+
+    function statusClass(status) {
+        const normalized = (status || "")
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/\s+/g, "-");
+        return `status-${normalized}`;
+    }
+
+    function normalizeStatus(status) {
+        return status || "Em aberto";
+    }
+
+    function snapshotRowState(rowNumber) {
+        const row = document.querySelector(`tr[data-row-number='${rowNumber}']`);
+        if (!row) {
+            return null;
+        }
+
+        const statusSelect = row.querySelector(".status-select");
+        const reasonSelect = row.querySelector(".reason-select");
+        const badge = row.querySelector(".status-badge");
+        return {
+            statusValue: statusSelect ? statusSelect.value : "",
+            lastStatus: statusSelect ? (statusSelect.dataset.lastStatus || "") : "",
+            reasonValue: reasonSelect ? reasonSelect.value : "",
+            badgeClass: badge ? badge.className : "",
+            badgeText: badge ? badge.textContent : "",
+        };
+    }
+
+    function restoreRowState(rowNumber, snapshot) {
+        if (!snapshot) {
+            return;
+        }
+        const row = document.querySelector(`tr[data-row-number='${rowNumber}']`);
+        if (!row) {
+            return;
+        }
+
+        const statusSelect = row.querySelector(".status-select");
+        if (statusSelect) {
+            statusSelect.value = snapshot.statusValue || "Em aberto";
+            statusSelect.dataset.lastStatus = snapshot.lastStatus || statusSelect.value;
+        }
+
+        const reasonSelect = row.querySelector(".reason-select");
+        if (reasonSelect) {
+            reasonSelect.value = snapshot.reasonValue || "";
+        }
+
+        const badge = row.querySelector(".status-badge");
+        if (badge) {
+            badge.className = snapshot.badgeClass || "status-badge";
+            badge.textContent = snapshot.badgeText || "";
+        }
+    }
+
+    function createTextCell(text) {
+        const td = document.createElement("td");
+        td.textContent = text || "";
+        return td;
+    }
+
+    function createStatusCell(status) {
+        const normalizedStatus = normalizeStatus(status);
+        const td = document.createElement("td");
+        const badge = document.createElement("span");
+        badge.className = `status-badge ${statusClass(normalizedStatus)}`;
+        badge.textContent = normalizedStatus;
+        td.appendChild(badge);
+        return td;
+    }
+
+    function createStatusSelectCell(ticket) {
+        const td = document.createElement("td");
+        const form = document.createElement("form");
+        form.className = "status-form";
+        form.method = "post";
+        form.action = updateStatusBaseUrl.replace(/0$/, String(ticket.row_number));
+
+        const select = document.createElement("select");
+        select.name = "status";
+        select.className = "status-select";
+        select.dataset.rowNumber = String(ticket.row_number);
+        select.dataset.lastStatus = normalizeStatus(ticket.status);
+
+        ["Em aberto", "Em andamento", "Concluído"].forEach((optionLabel) => {
+            const option = document.createElement("option");
+            option.value = optionLabel;
+            option.textContent = optionLabel;
+            if (normalizeStatus(ticket.status) === optionLabel) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+
+        form.appendChild(select);
+        td.appendChild(form);
+        return td;
+    }
+
+    function createReasonCell(ticket) {
+        const td = document.createElement("td");
+        const select = document.createElement("select");
+        select.className = "reason-select";
+        select.dataset.rowNumber = String(ticket.row_number);
+        const first = document.createElement("option");
+        first.value = "";
+        first.textContent = "Selecione";
+        select.appendChild(first);
+
+        resolutionReasons.forEach((reason) => {
+            const option = document.createElement("option");
+            option.value = reason;
+            option.textContent = reason;
+            if ((ticket.resolution_reason || "") === reason) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+
+        td.appendChild(select);
+        return td;
+    }
+
+    function createTicketRow(ticket) {
+        const tr = document.createElement("tr");
+        tr.dataset.rowNumber = String(ticket.row_number);
+        tr.appendChild(createTextCell(String(ticket.row_number)));
+        tr.appendChild(createTextCell(ticket.data_hora));
+        const localCell = createTextCell(ticket.local);
+        Object.assign(localCell.style, localColorStyle(ticket.local));
+        tr.appendChild(localCell);
+        tr.appendChild(createTextCell(ticket.problema));
+        tr.appendChild(createTextCell(ticket.solicitante));
+        tr.appendChild(createStatusCell(ticket.status));
+        tr.appendChild(createReasonCell(ticket));
+        tr.appendChild(createStatusSelectCell(ticket));
+        const deleteCell = document.createElement("td");
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "delete-btn";
+        deleteBtn.dataset.rowNumber = String(ticket.row_number);
+        deleteBtn.textContent = "Excluir";
+        deleteCell.appendChild(deleteBtn);
+        tr.appendChild(deleteCell);
+        return tr;
+    }
+
+    function updateRowFromTicket(row, ticket) {
+        const cells = row.querySelectorAll("td");
+        if (cells.length < 9) {
+            return;
+        }
+
+        cells[0].textContent = String(ticket.row_number || "");
+        cells[1].textContent = ticket.data_hora || "";
+        cells[2].textContent = ticket.local || "";
+        cells[2].style.color = "";
+        cells[2].style.fontWeight = "";
+        Object.assign(cells[2].style, localColorStyle(ticket.local));
+        cells[3].textContent = ticket.problema || "";
+        cells[4].textContent = ticket.solicitante || "";
+        updateRowStatusOnly(String(ticket.row_number), normalizeStatus(ticket.status));
+
+        const reasonSelect = cells[6].querySelector(".reason-select");
+        if (reasonSelect) {
+            const lockUntil = Number(row.dataset.reasonLockedUntil || "0");
+            if (lockUntil > Date.now()) {
+                return;
+            }
+            if (document.activeElement !== reasonSelect) {
+                reasonSelect.value = ticket.resolution_reason || "";
+                reasonSelect.dataset.lastReason = reasonSelect.value || "";
+            }
+        }
+    }
+
+    function updateRowStatusOnly(rowNumber, status) {
+        const row = document.querySelector(`tr[data-row-number='${rowNumber}']`);
+        if (!row) {
+            return;
+        }
+
+        const normalizedStatus = normalizeStatus(status);
+        const badge = row.querySelector(".status-badge");
+        if (badge) {
+            badge.className = `status-badge ${statusClass(normalizedStatus)}`;
+            badge.textContent = normalizedStatus;
+        }
+
+        const select = row.querySelector(".status-select");
+        if (select && select.value !== normalizedStatus) {
+            select.value = normalizedStatus;
+        }
+        if (select) {
+            select.dataset.lastStatus = normalizedStatus;
+        }
+    }
+
+    function initializeKnownRows() {
+        const tbody = document.getElementById("tickets-body");
+        tbody.querySelectorAll("tr[data-row-number]").forEach((row) => {
+            knownRows.add(row.dataset.rowNumber);
+        });
+    }
+
+    function renderGlobalSummary() {
+        document.getElementById("stat-total").textContent = String(globalSummary.total || 0);
+        document.getElementById("stat-aberto").textContent = String(globalSummary.aberto || 0);
+        document.getElementById("stat-andamento").textContent = String(globalSummary.andamento || 0);
+        document.getElementById("stat-concluido").textContent = String(globalSummary.concluido || 0);
+        document.getElementById("table-count").textContent = `${globalTotalItems || 0} itens`;
+    }
+
+    function adjustSummaryForStatusChange(previousStatus, newStatus) {
+        const prev = normalizeStatus(previousStatus);
+        const next = normalizeStatus(newStatus);
+        if (prev === next) {
+            return;
+        }
+
+        if (prev === "Em aberto") {
+            globalSummary.aberto = Math.max(0, (globalSummary.aberto || 0) - 1);
+        } else if (prev === "Em andamento") {
+            globalSummary.andamento = Math.max(0, (globalSummary.andamento || 0) - 1);
+        } else if (prev === "Concluído") {
+            globalSummary.concluido = Math.max(0, (globalSummary.concluido || 0) - 1);
+        }
+
+        if (next === "Em aberto") {
+            globalSummary.aberto = (globalSummary.aberto || 0) + 1;
+        } else if (next === "Em andamento") {
+            globalSummary.andamento = (globalSummary.andamento || 0) + 1;
+        } else if (next === "Concluído") {
+            globalSummary.concluido = (globalSummary.concluido || 0) + 1;
+        }
+
+        renderGlobalSummary();
+    }
+
+    function adjustSummaryForDelete(status) {
+        globalSummary.total = Math.max(0, (globalSummary.total || 0) - 1);
+        globalTotalItems = Math.max(0, (globalTotalItems || 0) - 1);
+
+        const current = normalizeStatus(status);
+        if (current === "Em aberto") {
+            globalSummary.aberto = Math.max(0, (globalSummary.aberto || 0) - 1);
+        } else if (current === "Em andamento") {
+            globalSummary.andamento = Math.max(0, (globalSummary.andamento || 0) - 1);
+        } else if (current === "Concluído") {
+            globalSummary.concluido = Math.max(0, (globalSummary.concluido || 0) - 1);
+        }
+
+        renderGlobalSummary();
+    }
+
+    function applyCurrentFilter() {
+        const rows = document.querySelectorAll("#tickets-body tr[data-row-number]");
+        rows.forEach((row) => {
+            const status = row.querySelector(".status-select")?.value || "Em aberto";
+            if (currentFilter === "todos") {
+                row.hidden = false;
+                return;
+            }
+
+            row.hidden = status !== currentFilter;
+        });
+    }
+
+    function refreshNewTicketsChip() {
+        const chip = document.getElementById("new-tickets-chip");
+        if (pendingNewCount <= 0) {
+            chip.hidden = true;
+            chip.textContent = "0 novos";
+            return;
+        }
+
+        chip.hidden = false;
+        chip.textContent = `${pendingNewCount} novos`;
+    }
+
+    function insertTicketSorted(tbody, row) {
+        const rowNumber = Number(row.dataset.rowNumber || "0");
+        const rows = [...tbody.querySelectorAll("tr[data-row-number]")];
+        const next = rows.find((item) => Number(item.dataset.rowNumber || "0") < rowNumber);
+        if (next) {
+            tbody.insertBefore(row, next);
+            return;
+        }
+
+        tbody.appendChild(row);
+    }
+
+    function reconcileTickets(tickets) {
+        const tbody = document.getElementById("tickets-body");
+        const previousRows = new Set(knownRows);
+        const incomingRows = new Set();
+        let insertedCount = 0;
+
+        const emptyRow = tbody.querySelector("tr[data-empty='true']");
+        if (emptyRow) {
+            emptyRow.remove();
+        }
+
+        tickets.forEach((ticket) => {
+            const key = String(ticket.row_number);
+            incomingRows.add(key);
+
+            const existing = tbody.querySelector(`tr[data-row-number='${key}']`);
+            if (existing) {
+                const lockUntil = Number(existing.dataset.reasonLockedUntil || "0");
+                if (lockUntil > Date.now()) {
+                    const cloned = { ...ticket };
+                    const reasonSelect = existing.querySelector(".reason-select");
+                    if (reasonSelect) {
+                        cloned.resolution_reason = reasonSelect.value || "";
+                    }
+                    updateRowFromTicket(existing, cloned);
+                } else {
+                    updateRowFromTicket(existing, ticket);
+                }
+                return;
+            }
+
+            const row = createTicketRow(ticket);
+            row.classList.add("new-row");
+            insertTicketSorted(tbody, row);
+            if (!previousRows.has(key)) {
+                insertedCount += 1;
+            }
+        });
+
+        [...tbody.querySelectorAll("tr[data-row-number]")].forEach((row) => {
+            if (!incomingRows.has(String(row.dataset.rowNumber))) {
+                row.remove();
+            }
+        });
+
+        if (!incomingRows.size) {
+            tbody.innerHTML = "";
+            const tr = document.createElement("tr");
+            tr.dataset.empty = "true";
+            const td = document.createElement("td");
+            td.colSpan = 9;
+            td.className = "empty-state";
+            td.textContent = "Nenhum chamado encontrado.";
+            tr.appendChild(td);
+            tbody.appendChild(tr);
+        }
+
+        knownRows.clear();
+        incomingRows.forEach((item) => knownRows.add(item));
+
+        pendingNewCount += insertedCount;
+        refreshNewTicketsChip();
+        renderGlobalSummary();
+        applyCurrentFilter();
+    }
+
+    function normalizeExistingRows() {
+        const rows = document.querySelectorAll("#tickets-body tr[data-row-number]");
+        rows.forEach((row) => {
+            const statusSelect = row.querySelector(".status-select");
+            if (!statusSelect) {
+                return;
+            }
+
+            const current = statusSelect.value || "";
+            let canonical = "Em aberto";
+            const lower = current.toLowerCase();
+            if (lower.includes("concl")) {
+                canonical = "Concluído";
+            } else if (lower.includes("andamento")) {
+                canonical = "Em andamento";
+            }
+
+            statusSelect.value = canonical;
+            const rowNumber = statusSelect.dataset.rowNumber;
+            updateRowStatusOnly(rowNumber, canonical);
+
+            const reasonSelect = row.querySelector(".reason-select");
+            if (reasonSelect && !reasonSelect.value && canonical === "Concluído") {
+                reasonSelect.focus();
+            }
+        });
+
+        renderGlobalSummary();
+        applyCurrentFilter();
+    }
+
+    async function pollNewTickets() {
+        try {
+            const response = await fetch(`${apiUrl}?page=${currentPage}&page_size=${pageSize}`, { cache: "no-store" });
+            if (!response.ok) {
+                throw new Error("Falha ao sincronizar chamados.");
+            }
+
+            const payload = await response.json();
+            const tickets = payload.tickets || [];
+            if (payload.status_summary) {
+                globalSummary = payload.status_summary;
+            }
+            if (payload.pagination && Number.isInteger(payload.pagination.total_items)) {
+                globalTotalItems = payload.pagination.total_items;
+            }
+            reconcileTickets(tickets);
+            setError(payload.error || "");
+        } catch (err) {
+            setError(err.message || "Erro inesperado ao atualizar os chamados.");
+        }
+    }
+
+    async function submitStatus(selectEl, forcedReason = null) {
+        const rowNumber = selectEl.dataset.rowNumber;
+        if (!rowNumber) {
+            return false;
+        }
+
+        if (rowSyncLocks.get(rowNumber) === "status") {
+            return false;
+        }
+        rowSyncLocks.set(rowNumber, "status");
+
+        const reasonSelect = document.querySelector(`.reason-select[data-row-number='${rowNumber}']`);
+        const selectedReason = forcedReason ?? (reasonSelect ? reasonSelect.value : "");
+        const previousStatus = selectEl.dataset.lastStatus || snapshotRowState(rowNumber)?.statusValue || "Em aberto";
+
+        const snapshot = snapshotRowState(rowNumber);
+        updateRowStatusOnly(rowNumber, selectEl.value);
+        if (reasonSelect && selectedReason) {
+            reasonSelect.value = selectedReason;
+        }
+        adjustSummaryForStatusChange(previousStatus, selectEl.value);
+        applyCurrentFilter();
+
+        const url = updateStatusBaseUrl.replace(/0$/, rowNumber);
+        const formData = new URLSearchParams();
+        formData.set("status", selectEl.value);
+        formData.set("resolution_reason", selectedReason);
+
+        selectEl.disabled = true;
+        try {
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-Requested-With": "fetch",
+                },
+                body: formData,
+            });
+
+            if (!response.ok) {
+                throw new Error("Falha ao atualizar status do chamado.");
+            }
+
+            const payload = await response.json();
+            if (!payload.ok) {
+                throw new Error(payload.error || "Nao foi possivel atualizar o status.");
+            }
+
+            setError("");
+            window.showToast("Atualizacao salva.", "success", 1400);
+            return true;
+        } catch (err) {
+            restoreRowState(rowNumber, snapshot);
+            adjustSummaryForStatusChange(selectEl.value, previousStatus);
+            applyCurrentFilter();
+            setError(err.message || "Erro ao atualizar status.");
+            return false;
+        } finally {
+            selectEl.disabled = false;
+            rowSyncLocks.delete(rowNumber);
+        }
+    }
+
+    async function submitReasonOnly(reasonSelectEl) {
+        const rowNumber = reasonSelectEl.dataset.rowNumber;
+        if (!rowNumber) {
+            return false;
+        }
+
+        if (rowSyncLocks.has(rowNumber)) {
+            return false;
+        }
+        rowSyncLocks.set(rowNumber, "reason");
+
+        const previousReason = reasonSelectEl.dataset.lastReason || "";
+        const currentReason = reasonSelectEl.value || "";
+        reasonSelectEl.dataset.lastReason = currentReason;
+        const row = document.querySelector(`tr[data-row-number='${rowNumber}']`);
+        if (row) {
+            row.dataset.reasonLockedUntil = String(Date.now() + 120000);
+        }
+
+        const url = updateReasonBaseUrl.replace(/0$/, rowNumber);
+        const formData = new URLSearchParams();
+        formData.set("resolution_reason", currentReason);
+        const statusSelect = document.querySelector(`.status-select[data-row-number='${rowNumber}']`);
+        if (statusSelect) {
+            formData.set("current_status", statusSelect.value || "");
+        }
+
+        try {
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-Requested-With": "fetch",
+                },
+                body: formData,
+            });
+
+            if (!response.ok) {
+                throw new Error("Falha ao salvar motivo.");
+            }
+
+            const payload = await response.json();
+            if (!payload.ok) {
+                throw new Error(payload.error || "Nao foi possivel salvar o motivo.");
+            }
+
+            if (row) {
+                row.dataset.reasonLockedUntil = String(Date.now() + 120000);
+            }
+            window.showToast("Motivo salvo.", "success", 1200);
+            return true;
+        } catch (err) {
+            reasonSelectEl.value = previousReason;
+            reasonSelectEl.dataset.lastReason = previousReason;
+            if (row) {
+                row.dataset.reasonLockedUntil = "0";
+            }
+            setError(err.message || "Erro ao salvar motivo.");
+            return false;
+        } finally {
+            rowSyncLocks.delete(rowNumber);
+        }
+    }
+
+    document.addEventListener("change", (event) => {
+        if (!event.target.classList.contains("status-select")) {
+            return;
+        }
+
+        const previousStatus = event.target.dataset.lastStatus || "Em aberto";
+        if (event.target.value === "Concluído" && !resolutionReasons.length) {
+            setError("Cadastre ao menos um motivo em Configuracoes para usar a lista de conclusao.");
+            event.target.value = previousStatus;
+            return;
+        }
+
+        submitStatus(event.target);
+    });
+
+    document.addEventListener("change", (event) => {
+        if (!event.target.classList.contains("reason-select")) {
+            return;
+        }
+
+        const rowNumber = event.target.dataset.rowNumber;
+        if (!rowNumber) {
+            return;
+        }
+
+        const statusSelect = document.querySelector(`.status-select[data-row-number='${rowNumber}']`);
+        if (statusSelect) {
+            submitStatus(statusSelect, event.target.value || "");
+            return;
+        }
+
+        submitReasonOnly(event.target);
+    });
+
+    function openDeleteConfirm(rowNumber) {
+        pendingDeleteRowNumber = rowNumber;
+        document.getElementById("delete-confirm-modal").hidden = false;
+    }
+
+    function closeDeleteConfirm() {
+        pendingDeleteRowNumber = null;
+        document.getElementById("delete-confirm-modal").hidden = true;
+    }
+
+    document.addEventListener("click", (event) => {
+        if (event.target.classList.contains("delete-btn")) {
+            const rowNumber = event.target.dataset.rowNumber;
+            if (!rowNumber) {
+                return;
+            }
+            openDeleteConfirm(rowNumber);
+            return;
+        }
+
+        if (!event.target.classList.contains("filter-btn")) {
+            return;
+        }
+
+        if (!event.target.dataset.filter) {
+            return;
+        }
+
+        const filter = event.target.dataset.filter || "todos";
+        currentFilter = filter;
+        document.querySelectorAll(".filter-btn").forEach((button) => {
+            button.classList.toggle("active", button.dataset.filter === filter);
+        });
+        pendingNewCount = 0;
+        refreshNewTicketsChip();
+        applyCurrentFilter();
+    });
+
+    initializeKnownRows();
+    normalizeExistingRows();
+    document.querySelectorAll(".reason-select").forEach((selectEl) => {
+        selectEl.dataset.lastReason = selectEl.value || "";
+    });
+    renderGlobalSummary();
+    applyCurrentFilter();
+    setInterval(pollNewTickets, AUTO_REFRESH_MS);
+
+    function resetTicketsScroll() {
+        const wrapper = document.querySelector(".table-wrapper");
+        if (wrapper) {
+            wrapper.scrollTop = 0;
+        }
+        window.scrollTo(0, 0);
+    }
+
+    resetTicketsScroll();
+    window.addEventListener("pageshow", resetTicketsScroll);
+    document.querySelectorAll(".pagination-link").forEach((link) => {
+        link.addEventListener("click", resetTicketsScroll);
+    });
+
+    document.getElementById("delete-cancel-btn").addEventListener("click", () => {
+        closeDeleteConfirm();
+    });
+
+    document.getElementById("delete-confirm-btn").addEventListener("click", () => {
+        if (!pendingDeleteRowNumber) {
+            return;
+        }
+
+        const rowNumber = pendingDeleteRowNumber;
+        closeDeleteConfirm();
+
+        requestAnimationFrame(() => {
+            const row = document.querySelector(`tr[data-row-number='${rowNumber}']`);
+            const rowSnapshot = row ? row.cloneNode(true) : null;
+            const nextSibling = row ? row.nextElementSibling : null;
+            const currentStatus = row?.querySelector(".status-select")?.value || "Em aberto";
+
+            if (row) {
+                row.remove();
+            }
+            knownRows.delete(String(rowNumber));
+            adjustSummaryForDelete(currentStatus);
+            applyCurrentFilter();
+
+            fetch(deleteTicketBaseUrl.replace(/0$/, rowNumber), {
+                method: "DELETE",
+                headers: {
+                    "X-Requested-With": "fetch",
+                },
+            })
+                .then((response) => response.json())
+                .then((payload) => {
+                    if (!payload.ok) {
+                        throw new Error(payload.error || "Nao foi possivel excluir o chamado.");
+                    }
+                    window.showToast("Chamado excluido com sucesso.", "error");
+                })
+                .catch((err) => {
+                    const tbody = document.getElementById("tickets-body");
+                    if (rowSnapshot && tbody) {
+                        if (nextSibling && nextSibling.parentNode === tbody) {
+                            tbody.insertBefore(rowSnapshot, nextSibling);
+                        } else {
+                            tbody.appendChild(rowSnapshot);
+                        }
+                        knownRows.add(String(rowNumber));
+                    }
+                    globalSummary.total = (globalSummary.total || 0) + 1;
+                    globalTotalItems = (globalTotalItems || 0) + 1;
+                    if (currentStatus === "Em aberto") {
+                        globalSummary.aberto = (globalSummary.aberto || 0) + 1;
+                    } else if (currentStatus === "Em andamento") {
+                        globalSummary.andamento = (globalSummary.andamento || 0) + 1;
+                    } else if (currentStatus === "Concluído") {
+                        globalSummary.concluido = (globalSummary.concluido || 0) + 1;
+                    }
+                    renderGlobalSummary();
+                    applyCurrentFilter();
+                    setError(err.message || "Erro ao excluir chamado.");
+                });
+        });
+    });
+</script>
+{% endblock %}
+{% endblock %}

@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}{{ branding.dashboard_title }}{% endblock %}
+
+{% block head_extras %}
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    surface: "var(--bg)",
+                    "surface-soft": "var(--surface-soft)",
+                    "surface-card": "var(--surface)",
+                    line: "var(--line)",
+                    ink: "var(--ink)",
+                    muted: "var(--muted)",
+                    primary: "var(--primary)",
+                    "primary-deep": "var(--primary-deep)",
+                    "ok-tone": "var(--accent-ok-strong)",
+                    "warn-tone": "var(--accent-warn-strong)",
+                    "open-tone": "var(--status-open-strong)"
+                }
+            }
+        }
+    };
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto space-y-6">
+    <section class="page-hero">
+        <div class="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10 blur-xl"></div>
+        <div class="absolute -bottom-10 left-10 h-36 w-36 rounded-full bg-white/10 blur-2xl"></div>
+        <div class="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+                <p class="text-xs font-extrabold uppercase tracking-[0.18em] text-white/90">{{ branding.org_name }}</p>
+                <h1 class="mt-2 text-3xl font-black tracking-tight md:text-4xl">{{ branding.dashboard_title }}</h1>
+                <p class="mt-2 max-w-2xl text-sm text-white/90">Operacao em tempo real com atualizacao automatica, foco em tempo de resposta e visibilidade do suporte tecnico.</p>
+            </div>
+            <div class="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.08em]">
+                <span class="material-symbols-outlined text-base">wifi_tethering</span>
+                Sincronizacao ativa
+            </div>
+        </div>
+    </section>
+
+    <section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <article class="rounded-2xl border border-line bg-surface-card p-5 shadow-sm">
+            <div class="mb-3 inline-flex rounded-xl p-2 text-primary-deep" style="background: var(--primary-soft, #e8f1ff);">
+                <span class="material-symbols-outlined">confirmation_number</span>
+            </div>
+            <p class="text-xs font-bold uppercase tracking-wide text-muted">Total</p>
+            <p class="mt-1 text-3xl font-black text-ink">{{ status_summary.total }}</p>
+        </article>
+
+        <article class="rounded-2xl border border-line bg-surface-card p-5 shadow-sm">
+            <div class="mb-3 inline-flex rounded-xl p-2 text-open-tone" style="background: var(--status-open-soft, #edf1f4);">
+                <span class="material-symbols-outlined">draft_orders</span>
+            </div>
+            <p class="text-xs font-bold uppercase tracking-wide text-muted">Em aberto</p>
+            <p class="mt-1 text-3xl font-black text-open-tone">{{ status_summary.aberto }}</p>
+        </article>
+
+        <article class="rounded-2xl border border-line bg-surface-card p-5 shadow-sm">
+            <div class="mb-3 inline-flex rounded-xl p-2 text-warn-tone" style="background: var(--warn-soft, #fff4df);">
+                <span class="material-symbols-outlined">manage_history</span>
+            </div>
+            <p class="text-xs font-bold uppercase tracking-wide text-muted">Em andamento</p>
+            <p class="mt-1 text-3xl font-black text-warn-tone">{{ status_summary.andamento }}</p>
+        </article>
+
+        <article class="rounded-2xl border border-line bg-surface-card p-5 shadow-sm">
+            <div class="mb-3 inline-flex rounded-xl p-2 text-ok-tone" style="background: var(--ok-soft, #e8f6ef);">
+                <span class="material-symbols-outlined">task_alt</span>
+            </div>
+            <p class="text-xs font-bold uppercase tracking-wide text-muted">Concluidos</p>
+            <p class="mt-1 text-3xl font-black text-ok-tone">{{ status_summary.concluido }}</p>
+        </article>
+    </section>
+
+    <section class="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <article class="rounded-2xl border border-line bg-surface-card p-6 shadow-sm xl:col-span-8 xl:col-start-1 xl:row-start-1">
+            <div class="mb-4 flex items-center justify-between gap-2">
+                <h2 class="text-lg font-extrabold text-ink">Chamados recentes</h2>
+                <a href="{{ url_for('tickets.tickets_page') }}" class="inline-flex items-center gap-1 rounded-lg border border-line px-3 py-1.5 text-xs font-bold text-primary-deep soft-hover">
+                    Ver todos
+                    <span class="material-symbols-outlined text-base">arrow_forward</span>
+                </a>
+            </div>
+            <div class="overflow-x-auto rounded-xl border border-line">
+                <table class="min-w-full text-left text-sm">
+                    <thead class="bg-surface-soft text-[11px] uppercase tracking-wide text-muted">
+                        <tr>
+                            <th class="px-4 py-3 font-bold">#</th>
+                            <th class="px-4 py-3 font-bold">Horario</th>
+                            <th class="px-4 py-3 font-bold">Local</th>
+                            <th class="px-4 py-3 font-bold">Solicitante</th>
+                            <th class="px-4 py-3 font-bold">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ticket in latest_tickets %}
+                            <tr class="border-t border-line">
+                                <td class="px-4 py-3 font-semibold text-ink">{{ ticket.row_number }}</td>
+                                <td class="px-4 py-3 text-muted">{{ ticket.data_hora }}</td>
+                                <td class="px-4 py-3 text-ink" style="{% if local_color_map.get(ticket.local) %}color: {{ local_color_map.get(ticket.local) }}; font-weight: 800;{% endif %}">{{ ticket.local }}</td>
+                                <td class="px-4 py-3 text-muted">{{ ticket.solicitante }}</td>
+                                <td class="px-4 py-3">
+                                    {% set status = ticket.status %}
+                                    <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-bold {% if status == 'Concluído' %}text-ok-tone{% elif status == 'Em andamento' %}text-warn-tone{% else %}text-open-tone{% endif %}" style="background: {% if status == 'Concluído' %}var(--ok-soft, #e8f6ef){% elif status == 'Em andamento' %}var(--warn-soft, #fff4df){% else %}var(--status-open-soft, #edf1f4){% endif %};">{{ status }}</span>
+                                </td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="5" class="px-4 py-8 text-center text-sm text-muted">Nenhum chamado encontrado.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </article>
+
+        <article class="rounded-2xl border border-line bg-surface-card p-6 shadow-sm xl:col-span-4 xl:col-start-9 xl:row-start-1">
+            <div class="mb-5 flex items-center justify-between gap-3">
+                <h2 class="text-lg font-extrabold text-ink">Saude da integracao</h2>
+                <span class="material-symbols-outlined text-primary-deep">monitor_heart</span>
+            </div>
+            <dl class="space-y-3 text-sm">
+                <div class="flex items-center justify-between gap-3 rounded-xl bg-surface px-3 py-2">
+                    <dt class="font-semibold text-muted">Credenciais</dt>
+                    <dd class="font-bold text-ink">{{ health.credentials }}</dd>
+                </div>
+                <div class="flex items-center justify-between gap-3 rounded-xl bg-surface px-3 py-2">
+                    <dt class="font-semibold text-muted">API</dt>
+                    <dd class="font-bold text-ink">{{ health.api }}</dd>
+                </div>
+                <div class="flex items-center justify-between gap-3 rounded-xl bg-surface px-3 py-2">
+                    <dt class="font-semibold text-muted">Ultima atualizacao</dt>
+                    <dd class="font-bold text-ink">{{ health.last_sync }}</dd>
+                </div>
+                <div class="rounded-xl bg-surface px-3 py-2">
+                    <dt class="font-semibold text-muted">Service Account</dt>
+                    <dd class="mt-1 break-all font-bold text-ink">{{ health.service_email or '--' }}</dd>
+                </div>
+            </dl>
+            {% set health_error_text = (health.error or '')|lower %}
+            {% set has_real_error = health_error_text and health_error_text != 'sem erros recentes.' %}
+            <p class="mt-4 rounded-xl px-3 py-2 text-xs font-semibold {{ 'health-error-box' if has_real_error else 'health-ok-box' }}">{{ health.error }}</p>
+        </article>
+
+        <article class="rounded-2xl border border-line bg-surface-card p-6 shadow-sm xl:col-span-8 xl:col-start-1 xl:row-start-2">
+            <div class="mb-5 flex items-center justify-between gap-3">
+                <div>
+                    <h2 class="text-lg font-extrabold text-ink">Distribuicao por local</h2>
+                    <p class="text-xs text-muted">Comparativo dos locais com maior volume de chamados.</p>
+                </div>
+                <span class="rounded-full bg-surface-soft px-3 py-1 text-xs font-bold text-muted">Top {{ dashboard_local_stats|length }}</span>
+            </div>
+            <div class="space-y-4">
+                {% for item in dashboard_local_stats %}
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between gap-3 text-xs">
+                            <span class="font-bold text-ink">{{ item.label }}</span>
+                            <span class="font-extrabold text-primary-deep">{{ item.total }}</span>
+                        </div>
+                        <div class="h-2.5 w-full overflow-hidden rounded-full bg-surface-soft">
+                            <div class="h-full rounded-full bg-gradient-to-r from-primary-deep to-primary" style="width: {{ (item.total * 100 / (dashboard_local_max or 1))|round(0, 'floor') }}%"></div>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="rounded-xl border border-dashed border-line bg-surface px-4 py-6 text-sm text-muted">
+                        Sem dados de localidade disponiveis no momento.
+                    </div>
+                {% endfor %}
+            </div>
+        </article>
+
+        <article class="rounded-2xl border border-line bg-surface-card p-6 shadow-sm xl:col-span-4 xl:col-start-9 xl:row-start-2">
+            <h2 class="text-lg font-extrabold text-ink">Acoes rapidas</h2>
+            <p class="mt-1 text-xs text-muted">Fluxos mais usados para operacao diaria.</p>
+            <div class="mt-5 space-y-3">
+                <a href="{{ url_for('tickets.tickets_page') }}" class="flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 text-sm font-bold text-ink soft-hover soft-border-hover">
+                    Gerenciar chamados
+                    <span class="material-symbols-outlined text-primary-deep">chevron_right</span>
+                </a>
+                <a href="{{ url_for('tickets.analytics_page') }}" class="flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 text-sm font-bold text-ink soft-hover soft-border-hover">
+                    Abrir analytics
+                    <span class="material-symbols-outlined text-primary-deep">chevron_right</span>
+                </a>
+                <a href="{{ url_for('tickets.settings_page') }}" class="flex items-center justify-between rounded-xl border border-line bg-surface px-4 py-3 text-sm font-bold text-ink soft-hover soft-border-hover">
+                    Ajustar integracao
+                    <span class="material-symbols-outlined text-primary-deep">chevron_right</span>
+                </a>
+            </div>
+        </article>
+    </section>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+    {% if error %}
+        window.showToast({{ error|tojson }}, "error");
+    {% endif %}
+</script>
+{% endblock %}

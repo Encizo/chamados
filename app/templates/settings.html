@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+
+{% block title %}Configuracoes de Integracao{% endblock %}
+
+{% block head_extras %}
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    surface: "var(--bg)",
+                    primary: "var(--primary)",
+                    "primary-container": "var(--primary-deep)",
+                    "surface-container-lowest": "var(--surface)",
+                    "surface-container-low": "var(--surface-soft)",
+                    "surface-container": "var(--surface-soft)",
+                    "on-surface": "var(--ink)",
+                    "on-surface-variant": "var(--muted)",
+                    secondary: "var(--accent-open)",
+                    "secondary-container": "var(--open-soft)",
+                    error: "var(--danger)",
+                    "error-container": "var(--danger-soft)",
+                },
+            },
+        },
+    };
+</script>
+<style>
+    .glass-panel { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(20px); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto space-y-8">
+    <section class="page-hero">
+        <div class="page-hero-content">
+            <div>
+                <p class="page-hero-kicker">{{ config.APP_ORG_NAME }}</p>
+                <h1>Configuracoes de Integracao</h1>
+                <p class="page-hero-subtitle">Gerencie credenciais, personalizacao visual e motivos de conclusao com seguranca e consistencia operacional.</p>
+            </div>
+            <div class="page-hero-chip">
+                <span class="material-symbols-outlined">settings</span>
+                Parametros do sistema
+            </div>
+        </div>
+    </section>
+
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+        <div class="lg:col-span-3 bg-surface-container-lowest p-8 rounded-xl flex items-center justify-between shadow-sm">
+            <div class="flex items-center gap-6">
+                <div class="h-16 w-16 bg-secondary-container rounded-xl flex items-center justify-center">
+                    <span class="material-symbols-outlined text-primary text-3xl">table_chart</span>
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-on-surface">Conexao Google Sheets</h2>
+                    <p class="text-on-surface-variant text-sm mt-1">Sincronizacao ativa entre sistema e base local.</p>
+                </div>
+            </div>
+            <div class="flex flex-col items-end gap-3">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary-container text-xs font-semibold">
+                    <span class="h-2 w-2 rounded-full bg-green-500"></span>
+                    Conectado
+                </span>
+                <button id="test-connection-btn" class="px-6 py-2 bg-primary text-white rounded-lg text-sm font-semibold transition-all hover:shadow-lg active:scale-95">
+                    Testar Conexao
+                </button>
+            </div>
+        </div>
+
+        <div class="lg:col-span-2 bg-gradient-to-br from-primary to-primary-container p-8 rounded-xl text-white shadow-md relative overflow-hidden">
+            <div class="relative z-10">
+                <h3 class="text-lg font-bold mb-2">Seguranca de Dados</h3>
+                <p class="text-blue-100 text-xs leading-relaxed opacity-90">
+                    Nunca exponha credenciais JSON em repositorios publicos. Use variaveis de ambiente em producao.
+                </p>
+                <div class="mt-4 flex items-center gap-2 text-xs font-bold bg-white/10 w-fit px-2 py-1 rounded">
+                    <span class="material-symbols-outlined text-sm">lock</span>
+                    Protecao ativa
+                </div>
+            </div>
+            <span class="material-symbols-outlined absolute -right-4 -bottom-4 text-9xl opacity-10">security</span>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
+        <div class="lg:col-span-3 space-y-8">
+            <section class="bg-surface-container-lowest rounded-xl p-8 shadow-sm">
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-6 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-lg">account_tree</span>
+                    Service Account (JSON)
+                </h3>
+
+                <form method="post" enctype="multipart/form-data" class="space-y-6" onsubmit="safeShowToast('Salvando integracao...', 'info', 1200)">
+                    <label for="service_account_file" class="border-2 border-dashed border-slate-300 rounded-xl p-10 flex flex-col items-center justify-center bg-surface-container-low hover:border-primary/40 transition-colors cursor-pointer">
+                        <span class="material-symbols-outlined text-slate-400 text-5xl mb-4">upload_file</span>
+                        <p class="text-on-surface font-semibold">Arraste seu arquivo JSON ou clique para buscar</p>
+                        <p class="text-on-surface-variant text-xs mt-2 italic">Sera salvo em credenciais/service-account.json</p>
+                    </label>
+                    <input id="service_account_file" type="file" name="service_account_file" accept=".json" class="hidden" />
+
+                    <div class="flex items-start gap-4 p-4 bg-surface-container rounded-lg">
+                        <div class="h-10 w-10 bg-surface-container-lowest rounded flex items-center justify-center shrink-0">
+                            <span class="material-symbols-outlined text-primary">verified_user</span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-xs text-on-surface-variant font-medium">E-mail detectado no JSON:</p>
+                            <p class="text-sm font-mono text-on-surface truncate font-medium">{{ service_email or 'Nao detectado' }}</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div>
+                            <label class="block text-xs font-bold text-on-surface-variant mb-2 ml-1" for="google_sheets_id">GOOGLE_SHEETS_ID</label>
+                            <input id="google_sheets_id" name="google_sheets_id" class="w-full bg-surface-container-low border-none rounded-lg focus:ring-2 focus:ring-primary/20 text-sm py-3 px-4 font-mono text-on-surface-variant" value="{{ values.google_sheets_id }}" />
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-on-surface-variant mb-2 ml-1" for="google_sheets_range">GOOGLE_SHEETS_RANGE</label>
+                            <input id="google_sheets_range" name="google_sheets_range" class="w-full bg-surface-container-low border-none rounded-lg focus:ring-2 focus:ring-primary/20 text-sm py-3 px-4" value="{{ values.google_sheets_range }}" />
+                        </div>
+                        <div class="flex justify-end pt-2">
+                            <button type="submit" class="px-8 py-2.5 bg-primary text-white rounded-lg font-bold text-sm shadow-md hover:shadow-lg transition-all">Salvar Configuracoes</button>
+                        </div>
+                    </div>
+                </form>
+            </section>
+
+            <section class="bg-surface-container-lowest rounded-xl p-8 shadow-sm">
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-6 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-lg">palette</span>
+                    Personalizacao de Interface
+                </h3>
+                <form method="post" class="grid grid-cols-1 md:grid-cols-2 gap-4" onsubmit="safeShowToast('Salvando personalizacao...', 'info', 1200)">
+                    <input name="app_brand_short" value="{{ values.app_brand_short }}" placeholder="Menu - nome curto" class="bg-surface-container-low border-none rounded-lg py-3 px-4 text-sm" />
+                    <input name="app_brand_name" value="{{ values.app_brand_name }}" placeholder="Menu - nome principal" class="bg-surface-container-low border-none rounded-lg py-3 px-4 text-sm" />
+                    <input name="app_org_name" value="{{ values.app_org_name }}" placeholder="Organizacao" class="bg-surface-container-low border-none rounded-lg py-3 px-4 text-sm" />
+                    <input name="app_dashboard_title" value="{{ values.app_dashboard_title }}" placeholder="Titulo dashboard" class="bg-surface-container-low border-none rounded-lg py-3 px-4 text-sm" />
+                    <input name="app_tickets_title" value="{{ values.app_tickets_title }}" placeholder="Titulo chamados" class="bg-surface-container-low border-none rounded-lg py-3 px-4 text-sm md:col-span-2" />
+                    <input name="app_tickets_subtitle" value="{{ values.app_tickets_subtitle }}" placeholder="Subtitulo chamados" class="bg-surface-container-low border-none rounded-lg py-3 px-4 text-sm md:col-span-2" />
+
+                    <div class="md:col-span-2">
+                        <p class="text-xs font-bold text-on-surface-variant mb-2 ml-1">Paleta de cores do sistema</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {% for palette in theme_palettes %}
+                                <label data-palette-card class="cursor-pointer rounded-xl border p-3 transition-all {% if values.app_theme_palette == palette.key %}border-primary ring-2 ring-primary/20 bg-white{% else %}border-slate-200 bg-surface-container-lowest hover:border-primary/40{% endif %}">
+                                    <input type="radio" name="app_theme_palette" value="{{ palette.key }}" class="sr-only" {% if values.app_theme_palette == palette.key %}checked{% endif %} />
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div>
+                                            <p class="text-sm font-bold text-on-surface">{{ palette.name }}</p>
+                                            <p class="text-[11px] text-on-surface-variant mt-1">{{ palette.description }}</p>
+                                        </div>
+                                        <div class="flex items-center gap-1.5 mt-0.5">
+                                            {% for color in palette.colors %}
+                                                <span class="h-4 w-4 rounded-full border border-black/10" style="background: {{ color }};"></span>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                </label>
+                            {% endfor %}
+                        </div>
+                        <p class="mt-2 text-[11px] text-on-surface-variant">A visualizacao da paleta usa as 3 cores principais. Alguns elementos usam variacoes automaticas (claro/escuro) para manter contraste e legibilidade.</p>
+                    </div>
+
+                    <div class="md:col-span-2 flex justify-end">
+                        <button type="submit" class="px-8 py-2.5 bg-primary text-white rounded-lg font-bold text-sm shadow-md hover:shadow-lg transition-all">Salvar Personalizacao</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="bg-surface-container-lowest rounded-xl p-8 shadow-sm">
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-lg">format_color_fill</span>
+                    Cores por Localidade
+                </h3>
+                <p class="text-xs text-on-surface-variant mb-4">Defina a cor de cada localidade. Essa cor aparece no nome do local em Tickets, Dashboard (chamados recentes) e Modo Monitor.</p>
+
+                <div class="mb-4">
+                    <label for="local-color-search" class="block text-xs font-bold text-on-surface-variant mb-2 ml-1">Pesquisar localidade</label>
+                    <input id="local-color-search" type="text" placeholder="Digite para filtrar localidades" class="w-full bg-surface-container-low border-none rounded-lg py-3 px-4 text-sm" />
+                </div>
+
+                <form method="post" onsubmit="safeShowToast('Salvando cores por localidade...', 'info', 1200)">
+                    <div id="local-color-grid" class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-72 overflow-auto pr-1">
+                        {% for local in local_options %}
+                            <label data-local-color-item data-local-name="{{ local|lower }}" class="rounded-xl border border-slate-200 bg-surface-container-lowest p-3 flex items-center gap-3">
+                                <input type="hidden" name="local_color_name" value="{{ local }}" />
+                                <input type="color" name="local_color_value" value="{{ local_color_map.get(local, '#576772') }}" class="h-9 w-12 rounded border border-slate-300 bg-transparent p-0" />
+                                <span class="text-sm font-semibold text-on-surface">{{ local }}</span>
+                            </label>
+                        {% else %}
+                            <p class="text-xs text-on-surface-variant">Nenhuma localidade encontrada ainda para customizar.</p>
+                        {% endfor %}
+                    </div>
+
+                    <p id="local-color-empty" class="mt-3 text-xs text-on-surface-variant hidden">Nenhuma localidade encontrada para essa busca.</p>
+
+                    <div class="mt-4 flex justify-end">
+                        <button type="submit" class="px-8 py-2.5 bg-primary text-white rounded-lg font-bold text-sm shadow-md hover:shadow-lg transition-all">Salvar Cores de Localidades</button>
+                    </div>
+                </form>
+            </section>
+        </div>
+
+        <div class="lg:col-span-2 space-y-6">
+            <section class="bg-surface-container-low rounded-xl p-6 border-l-4 border-primary">
+                <h3 class="text-sm font-bold text-on-primary-fixed-variant mb-4">Motivos de Conclusao</h3>
+                <form method="post" class="space-y-3" onsubmit="safeShowToast('Adicionando motivo...', 'info', 1200)">
+                    <input id="new_resolution_reason" name="new_resolution_reason" placeholder="Ex.: Formatacao" class="w-full bg-white border-none rounded-lg py-2.5 px-3 text-sm" />
+                    <textarea id="new_resolution_reason_note" name="new_resolution_reason_note" placeholder="Observacao opcional (ex.: o que significa, quando usar)" class="w-full bg-white border-none rounded-lg py-2.5 px-3 text-sm min-h-[88px]"></textarea>
+                    <button type="submit" class="w-full bg-primary text-white py-2 rounded-lg text-sm font-bold">Adicionar motivo</button>
+                </form>
+
+                <form method="post" class="space-y-3 mt-4" onsubmit="safeShowToast('Removendo motivo...', 'warning', 1200)">
+                    <select id="remove_resolution_reason" name="remove_resolution_reason" class="w-full bg-white border-none rounded-lg py-2.5 px-3 text-sm">
+                        <option value="">Selecione para remover</option>
+                        {% for reason in resolution_reasons %}
+                            <option value="{{ reason }}">{{ reason }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="w-full bg-red-100 text-red-700 py-2 rounded-lg text-sm font-bold">Remover motivo</button>
+                </form>
+
+                <div class="mt-4 max-h-[220px] overflow-y-auto space-y-2 pr-1">
+                    {% for entry in resolution_reason_entries %}
+                        <div class="bg-white border border-slate-200 rounded-lg p-3">
+                            <p class="text-xs font-bold text-on-surface">{{ entry.name }}</p>
+                            {% if entry.note %}
+                                <p class="text-[11px] text-on-surface-variant mt-1">{{ entry.note }}</p>
+                            {% else %}
+                                <p class="text-[11px] text-slate-400 mt-1">Sem observacao.</p>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <p class="text-[11px] text-on-surface-variant">Nenhum motivo cadastrado ainda.</p>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <section class="space-y-3">
+                <h3 class="text-xs font-bold uppercase tracking-widest text-slate-400 px-1">Alertas de Erros Comuns</h3>
+                <div class="bg-surface-container-lowest p-4 rounded-xl border-l-4 border-error/50 shadow-sm">
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="text-xs font-bold text-error">JSON Invalido</span>
+                        <span class="material-symbols-outlined text-error text-lg">error</span>
+                    </div>
+                    <p class="text-[11px] text-on-surface-variant leading-normal">Arquivo fora do padrao JSON da Service Account.</p>
+                </div>
+                <div class="bg-surface-container-lowest p-4 rounded-xl border-l-4 border-primary/30 shadow-sm">
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="text-xs font-bold text-primary">Erro 403 (Permissao)</span>
+                        <span class="material-symbols-outlined text-primary text-lg">block</span>
+                    </div>
+                    <p class="text-[11px] text-on-surface-variant leading-normal">Compartilhe a planilha com o e-mail da Service Account.</p>
+                </div>
+                <div class="bg-surface-container-lowest p-4 rounded-xl border-l-4 border-slate-300 shadow-sm">
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="text-xs font-bold text-slate-600">Range Invalido</span>
+                        <span class="material-symbols-outlined text-slate-600 text-lg">tab_unselected</span>
+                    </div>
+                    <p class="text-[11px] text-on-surface-variant leading-normal">Aba/intervalo informado nao existe na planilha.</p>
+                </div>
+            </section>
+
+            <section class="glass-panel rounded-xl p-6 border border-white/50 shadow-sm">
+                <h4 class="text-sm font-bold text-on-surface mb-2">Boas praticas</h4>
+                <ul class="space-y-2 text-[11px] text-on-surface-variant">
+                    <li>Nao versionar `credenciais/service-account.json` no Git.</li>
+                    <li>Manter `credenciais/` no `.gitignore`.</li>
+                    <li>Testar conexao sempre apos alterar ID/range.</li>
+                </ul>
+            </section>
+        </div>
+    </div>
+</div>
+
+<div id="remove-reason-modal" class="modal-overlay" hidden>
+    <div class="modal-card">
+        <h3>Confirmar remocao de motivo</h3>
+        <p id="remove-reason-modal-text">Este motivo esta em uso e sera removido dos chamados.</p>
+        <div class="modal-actions">
+            <button id="remove-reason-cancel" type="button" class="modal-btn-secondary">Cancelar</button>
+            <button id="remove-reason-confirm" type="button" class="primary-btn">Continuar</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+    const reasonUsageMap = {{ reason_usage_map|tojson }};
+    const selectedPaletteInput = document.querySelector("input[name='app_theme_palette']:checked");
+
+    function syncPaletteSelectionUI() {
+        const cards = document.querySelectorAll("[data-palette-card]");
+        cards.forEach((card) => {
+            const input = card.querySelector("input[name='app_theme_palette']");
+            if (!input) {
+                return;
+            }
+            const selected = input.checked;
+            card.classList.toggle("border-primary", selected);
+            card.classList.toggle("ring-2", selected);
+            card.classList.toggle("ring-primary/20", selected);
+            card.classList.toggle("bg-white", selected);
+            card.classList.toggle("border-slate-200", !selected);
+            card.classList.toggle("bg-surface-container-lowest", !selected);
+        });
+    }
+
+    function safeShowToast(message, type) {
+        if (!message) {
+            return;
+        }
+        const tryShow = () => {
+            if (typeof window.showToast === "function") {
+                window.showToast(message, type);
+                return true;
+            }
+            return false;
+        };
+        if (tryShow()) {
+            return;
+        }
+        setTimeout(() => {
+            tryShow();
+        }, 80);
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        {% if message %}
+            safeShowToast({{ message|tojson }}, {{ message_type|tojson }});
+        {% endif %}
+        syncPaletteSelectionUI();
+    });
+
+    document.querySelectorAll("input[name='app_theme_palette']").forEach((input) => {
+        input.addEventListener("change", syncPaletteSelectionUI);
+    });
+
+    const localSearchInput = document.getElementById("local-color-search");
+    const localItems = Array.from(document.querySelectorAll("[data-local-color-item]"));
+    const localEmpty = document.getElementById("local-color-empty");
+
+    function filterLocalColors() {
+        if (!localSearchInput) {
+            return;
+        }
+
+        const term = (localSearchInput.value || "").trim().toLowerCase();
+        let visibleCount = 0;
+
+        localItems.forEach((item) => {
+            const name = (item.dataset.localName || "").toLowerCase();
+            const visible = !term || name.includes(term);
+            item.classList.toggle("hidden", !visible);
+            if (visible) {
+                visibleCount += 1;
+            }
+        });
+
+        if (localEmpty) {
+            localEmpty.classList.toggle("hidden", visibleCount > 0 || !term);
+        }
+    }
+
+    if (localSearchInput) {
+        localSearchInput.addEventListener("input", filterLocalColors);
+    }
+
+    const testBtn = document.getElementById("test-connection-btn");
+    testBtn.addEventListener("click", async () => {
+        testBtn.disabled = true;
+        try {
+            const response = await fetch("{{ url_for('tickets.test_connection') }}", { method: "POST" });
+            const payload = await response.json();
+            safeShowToast(payload.message || "Sem resposta.", payload.ok ? "success" : "error");
+        } catch (err) {
+            safeShowToast("Erro ao testar conexao.", "error");
+        } finally {
+            testBtn.disabled = false;
+        }
+    });
+
+    const removeReasonSelect = document.getElementById("remove_resolution_reason");
+    const removeReasonModal = document.getElementById("remove-reason-modal");
+    const removeReasonModalText = document.getElementById("remove-reason-modal-text");
+    const removeReasonCancel = document.getElementById("remove-reason-cancel");
+    const removeReasonConfirm = document.getElementById("remove-reason-confirm");
+    let allowReasonRemoveSubmit = false;
+    let pendingReasonRemoveForm = null;
+
+    function openReasonRemoveModal(message, formEl) {
+        removeReasonModalText.textContent = message;
+        pendingReasonRemoveForm = formEl;
+        removeReasonModal.hidden = false;
+    }
+
+    function closeReasonRemoveModal() {
+        removeReasonModal.hidden = true;
+        pendingReasonRemoveForm = null;
+    }
+
+    removeReasonCancel.addEventListener("click", () => {
+        closeReasonRemoveModal();
+    });
+
+    removeReasonConfirm.addEventListener("click", () => {
+        if (!pendingReasonRemoveForm) {
+            return;
+        }
+        allowReasonRemoveSubmit = true;
+        pendingReasonRemoveForm.requestSubmit();
+        closeReasonRemoveModal();
+    });
+
+    if (removeReasonSelect) {
+        const removeForm = removeReasonSelect.closest("form");
+        if (removeForm) {
+            removeForm.addEventListener("submit", (event) => {
+                if (allowReasonRemoveSubmit) {
+                    allowReasonRemoveSubmit = false;
+                    return;
+                }
+
+                const selected = removeReasonSelect.value;
+                if (!selected) {
+                    return;
+                }
+
+                const usage = reasonUsageMap[selected] || 0;
+                if (!usage) {
+                    return;
+                }
+
+                event.preventDefault();
+                const confirmText = `O motivo "${selected}" esta em uso em ${usage} chamado(s). Se continuar, ele sera removido de todos esses chamados e passara a contar como "Sem motivo" no Analytics.`;
+                openReasonRemoveModal(confirmText, removeForm);
+            });
+        }
+    }
+</script>
+{% endblock %}

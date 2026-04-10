@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login - Ticket Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+    <style>
+        :root {
+            --bg: #f6f8fb;
+            --surface: #ffffff;
+            --line: #d8e0e6;
+            --ink: #1a1f24;
+            --muted: #5b6a75;
+            --primary: #005eb8;
+            --primary-deep: #00478d;
+            --danger: #a63d2f;
+            --danger-soft: #f7e6e2;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            font-family: "Manrope", sans-serif;
+            color: var(--ink);
+            background: radial-gradient(circle at 12% 10%, #dce9fb 0%, transparent 34%),
+                        radial-gradient(circle at 86% 92%, #d9e8fb 0%, transparent 30%),
+                        var(--bg);
+            padding: 20px;
+        }
+        .login-shell {
+            width: min(960px, 100%);
+            display: grid;
+            grid-template-columns: 1.1fr 1fr;
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            overflow: hidden;
+            background: var(--surface);
+            box-shadow: 0 24px 54px rgba(26, 40, 52, 0.18);
+        }
+        .hero {
+            background: linear-gradient(140deg, var(--primary-deep), var(--primary));
+            color: #fff;
+            padding: 34px;
+            position: relative;
+            overflow: hidden;
+        }
+        .hero::before {
+            content: "";
+            position: absolute;
+            width: 180px;
+            height: 180px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.16);
+            right: -48px;
+            top: -48px;
+        }
+        .hero h1 { margin: 10px 0 8px; font-size: 1.8rem; }
+        .hero p { margin: 0; color: rgba(255,255,255,0.9); line-height: 1.5; }
+        .hero .kicker { font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 800; color: rgba(255,255,255,0.88); }
+        .form-panel { padding: 34px; }
+        .form-panel h2 { margin: 0 0 6px; font-size: 1.4rem; }
+        .muted { margin: 0 0 18px; color: var(--muted); font-size: 0.92rem; }
+        .group { display: grid; gap: 6px; margin-bottom: 12px; }
+        label { font-size: 0.8rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+        input {
+            border: 1px solid var(--line);
+            border-radius: 11px;
+            padding: 11px 12px;
+            font: inherit;
+            font-size: 0.95rem;
+            background: #fbfdff;
+        }
+        .btn {
+            margin-top: 6px;
+            width: 100%;
+            border: 0;
+            border-radius: 12px;
+            padding: 12px 14px;
+            color: #fff;
+            font: inherit;
+            font-weight: 800;
+            font-size: 0.95rem;
+            background: linear-gradient(120deg, var(--primary), var(--primary-deep));
+            cursor: pointer;
+        }
+        .error {
+            margin-bottom: 10px;
+            border: 1px solid var(--line);
+            background: var(--danger-soft);
+            color: var(--danger);
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 0.84rem;
+            font-weight: 700;
+        }
+        @media (max-width: 880px) {
+            .login-shell { grid-template-columns: 1fr; }
+            .hero { padding: 24px; }
+            .form-panel { padding: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-shell">
+        <section class="hero">
+            <span class="kicker">Open Source Ticket Platform</span>
+            <h1>Monitoramento e Gerencia de Chamados</h1>
+            <p>Sistema de operacao em tempo real para acompanhar, atualizar e analisar chamados com desempenho e seguranca.</p>
+        </section>
+
+        <section class="form-panel">
+            <h2>Acesso administrador</h2>
+            <p class="muted">Entre com login e senha para acessar o painel.</p>
+
+            {% if error %}
+                <div class="error">{{ error }}</div>
+            {% endif %}
+
+            <form method="post">
+                <input type="hidden" name="next" value="{{ next_url }}" />
+                <div class="group">
+                    <label for="username">Login</label>
+                    <input id="username" name="username" value="{{ username }}" autocomplete="username" required />
+                </div>
+                <div class="group">
+                    <label for="password">Senha</label>
+                    <input id="password" type="password" name="password" autocomplete="current-password" required />
+                </div>
+                <button class="btn" type="submit">Entrar no painel</button>
+            </form>
+        </section>
+    </div>
+</body>
+</html>
