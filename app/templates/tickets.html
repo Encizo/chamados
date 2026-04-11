@@ -111,7 +111,6 @@
         <table>
             <thead>
                 <tr>
-                    <th>#</th>
                     <th>Data e hora</th>
                     <th>Local</th>
                     <th>Problema informado</th>
@@ -125,7 +124,6 @@
             <tbody id="tickets-body">
                 {% for ticket in tickets %}
                     <tr data-row-number="{{ ticket.row_number }}">
-                        <td>{{ ticket.row_number }}</td>
                         <td>{{ ticket.data_hora }}</td>
                         <td style="{% if local_color_map.get(ticket.local) %}color: {{ local_color_map.get(ticket.local) }}; font-weight: 800;{% endif %}">{{ ticket.local }}</td>
                         <td>{{ ticket.problema }}</td>
@@ -156,7 +154,7 @@
                     </tr>
                 {% else %}
                     <tr data-empty="true">
-                        <td colspan="9" class="empty-state">Nenhum chamado encontrado.</td>
+                        <td colspan="8" class="empty-state">Nenhum chamado encontrado.</td>
                     </tr>
                 {% endfor %}
             </tbody>
@@ -221,6 +219,7 @@
     let pendingNewCount = 0;
     let pendingDeleteRowNumber = null;
     const rowSyncLocks = new Map();
+    const deletingRows = new Set();
 
     function setError(message) {
         if (!message) {
@@ -358,7 +357,6 @@
     function createTicketRow(ticket) {
         const tr = document.createElement("tr");
         tr.dataset.rowNumber = String(ticket.row_number);
-        tr.appendChild(createTextCell(String(ticket.row_number)));
         tr.appendChild(createTextCell(ticket.data_hora));
         const localCell = createTextCell(ticket.local);
         Object.assign(localCell.style, localColorStyle(ticket.local));
@@ -381,21 +379,20 @@
 
     function updateRowFromTicket(row, ticket) {
         const cells = row.querySelectorAll("td");
-        if (cells.length < 9) {
+        if (cells.length < 8) {
             return;
         }
 
-        cells[0].textContent = String(ticket.row_number || "");
-        cells[1].textContent = ticket.data_hora || "";
-        cells[2].textContent = ticket.local || "";
-        cells[2].style.color = "";
-        cells[2].style.fontWeight = "";
-        Object.assign(cells[2].style, localColorStyle(ticket.local));
-        cells[3].textContent = ticket.problema || "";
-        cells[4].textContent = ticket.solicitante || "";
+        cells[0].textContent = ticket.data_hora || "";
+        cells[1].textContent = ticket.local || "";
+        cells[1].style.color = "";
+        cells[1].style.fontWeight = "";
+        Object.assign(cells[1].style, localColorStyle(ticket.local));
+        cells[2].textContent = ticket.problema || "";
+        cells[3].textContent = ticket.solicitante || "";
         updateRowStatusOnly(String(ticket.row_number), normalizeStatus(ticket.status));
 
-        const reasonSelect = cells[6].querySelector(".reason-select");
+        const reasonSelect = cells[5].querySelector(".reason-select");
         if (reasonSelect) {
             const lockUntil = Number(row.dataset.reasonLockedUntil || "0");
             if (lockUntil > Date.now()) {
@@ -513,15 +510,23 @@
     }
 
     function insertTicketSorted(tbody, row) {
-        const rowNumber = Number(row.dataset.rowNumber || "0");
-        const rows = [...tbody.querySelectorAll("tr[data-row-number]")];
-        const next = rows.find((item) => Number(item.dataset.rowNumber || "0") < rowNumber);
-        if (next) {
-            tbody.insertBefore(row, next);
-            return;
-        }
-
         tbody.appendChild(row);
+    }
+
+    function reorderRowsByIncoming(tbody, tickets) {
+        const order = new Map();
+        tickets.forEach((ticket, index) => {
+            order.set(String(ticket.row_number), index);
+        });
+
+        const rows = [...tbody.querySelectorAll("tr[data-row-number]")];
+        rows.sort((a, b) => {
+            const ai = order.get(a.dataset.rowNumber || "") ?? Number.MAX_SAFE_INTEGER;
+            const bi = order.get(b.dataset.rowNumber || "") ?? Number.MAX_SAFE_INTEGER;
+            return ai - bi;
+        });
+
+        rows.forEach((row) => tbody.appendChild(row));
     }
 
     function reconcileTickets(tickets) {
@@ -568,6 +573,8 @@
                 row.remove();
             }
         });
+
+        reorderRowsByIncoming(tbody, tickets);
 
         if (!incomingRows.size) {
             tbody.innerHTML = "";
@@ -879,16 +886,17 @@
 
         requestAnimationFrame(() => {
             const row = document.querySelector(`tr[data-row-number='${rowNumber}']`);
-            const rowSnapshot = row ? row.cloneNode(true) : null;
-            const nextSibling = row ? row.nextElementSibling : null;
             const currentStatus = row?.querySelector(".status-select")?.value || "Em aberto";
-
-            if (row) {
-                row.remove();
+            if (deletingRows.has(String(rowNumber))) {
+                return;
             }
-            knownRows.delete(String(rowNumber));
-            adjustSummaryForDelete(currentStatus);
-            applyCurrentFilter();
+            deletingRows.add(String(rowNumber));
+
+            const deleteBtn = row?.querySelector(".delete-btn");
+            if (deleteBtn) {
+                deleteBtn.disabled = true;
+            }
+            window.showToast("Excluindo chamado...", "info", 2200);
 
             fetch(deleteTicketBaseUrl.replace(/0$/, rowNumber), {
                 method: "DELETE",
@@ -901,30 +909,23 @@
                     if (!payload.ok) {
                         throw new Error(payload.error || "Nao foi possivel excluir o chamado.");
                     }
+                    if (row) {
+                        row.remove();
+                    }
+                    knownRows.delete(String(rowNumber));
+                    adjustSummaryForDelete(currentStatus);
+                    applyCurrentFilter();
                     window.showToast("Chamado excluido com sucesso.", "error");
+                    return pollNewTickets();
                 })
                 .catch((err) => {
-                    const tbody = document.getElementById("tickets-body");
-                    if (rowSnapshot && tbody) {
-                        if (nextSibling && nextSibling.parentNode === tbody) {
-                            tbody.insertBefore(rowSnapshot, nextSibling);
-                        } else {
-                            tbody.appendChild(rowSnapshot);
-                        }
-                        knownRows.add(String(rowNumber));
-                    }
-                    globalSummary.total = (globalSummary.total || 0) + 1;
-                    globalTotalItems = (globalTotalItems || 0) + 1;
-                    if (currentStatus === "Em aberto") {
-                        globalSummary.aberto = (globalSummary.aberto || 0) + 1;
-                    } else if (currentStatus === "Em andamento") {
-                        globalSummary.andamento = (globalSummary.andamento || 0) + 1;
-                    } else if (currentStatus === "Concluído") {
-                        globalSummary.concluido = (globalSummary.concluido || 0) + 1;
-                    }
-                    renderGlobalSummary();
-                    applyCurrentFilter();
                     setError(err.message || "Erro ao excluir chamado.");
+                })
+                .finally(() => {
+                    deletingRows.delete(String(rowNumber));
+                    if (deleteBtn) {
+                        deleteBtn.disabled = false;
+                    }
                 });
         });
     });

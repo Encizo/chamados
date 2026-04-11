@@ -991,19 +991,21 @@ def update_status(row_number: int):
 
     error = None
     try:
+        sheet_row = db.get_sheet_row_for_ticket(row_number)
         db.set_ticket_status(
             row_number=row_number,
             status=status,
             resolution_reason=resolution_reason,
         )
-        _schedule_sheet_write(
-            service_account_file=current_app.config["GOOGLE_SERVICE_ACCOUNT_FILE"],
-            sheet_id=current_app.config["GOOGLE_SHEETS_ID"],
-            sheet_range=current_app.config["GOOGLE_SHEETS_RANGE"],
-            action="status",
-            row_number=row_number,
-            status=status,
-        )
+        if sheet_row:
+            _schedule_sheet_write(
+                service_account_file=current_app.config["GOOGLE_SERVICE_ACCOUNT_FILE"],
+                sheet_id=current_app.config["GOOGLE_SHEETS_ID"],
+                sheet_range=current_app.config["GOOGLE_SHEETS_RANGE"],
+                action="status",
+                row_number=sheet_row,
+                status=status,
+            )
     except Exception as exc:
         error = str(exc)
 
@@ -1032,15 +1034,53 @@ def delete_ticket(row_number: int):
     db = DatabaseService(current_app.config["DATABASE_PATH"])
 
     try:
-        db.delete_ticket(row_number=row_number)
-        db.shift_row_numbers_after_delete(row_number)
-        _schedule_sheet_write(
+        snapshot = db.get_ticket_snapshot(row_number)
+        if not snapshot:
+            return jsonify({"ok": False, "error": "Chamado nao encontrado na base local."})
+
+        sheet_row = db.get_sheet_row_for_ticket(row_number)
+        service = SheetsService(
             service_account_file=current_app.config["GOOGLE_SERVICE_ACCOUNT_FILE"],
             sheet_id=current_app.config["GOOGLE_SHEETS_ID"],
             sheet_range=current_app.config["GOOGLE_SHEETS_RANGE"],
-            action="delete",
-            row_number=row_number,
         )
+
+        deleted_in_sheet = False
+        deleted_sheet_row: int | None = None
+
+        if sheet_row:
+            service.delete_ticket_row(sheet_row)
+            deleted_in_sheet = True
+            deleted_sheet_row = sheet_row
+        else:
+            latest = service.fetch_tickets()
+            target_uid = DatabaseService._build_ticket_uid(
+                data_hora=snapshot["data_hora"],
+                local=snapshot["local"],
+                problema=snapshot["problema"],
+                solicitante=snapshot["solicitante"],
+            )
+            for item in latest:
+                item_uid = DatabaseService._build_ticket_uid(
+                    data_hora=item.data_hora,
+                    local=item.local,
+                    problema=item.problema,
+                    solicitante=item.solicitante,
+                )
+                if item_uid == target_uid:
+                    service.delete_ticket_row(item.row_number)
+                    deleted_in_sheet = True
+                    deleted_sheet_row = item.row_number
+                    break
+
+        if deleted_in_sheet and deleted_sheet_row is not None:
+            db.shift_sheet_row_numbers_after_remote_delete(deleted_sheet_row)
+            try:
+                db.upsert_tickets_from_sheet(service.fetch_tickets())
+            except Exception:
+                pass
+
+        db.delete_ticket(row_number=row_number)
         return jsonify({"ok": True})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)})

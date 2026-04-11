@@ -240,10 +240,26 @@ class SheetsService:
     def _get_sheet_gid(self, service) -> int:
         meta = service.spreadsheets().get(spreadsheetId=self.sheet_id).execute()
         title = self._get_sheet_title()
+        normalized_title = self._normalize_text(title)
+
+        sheets = meta.get("sheets", [])
+        if not sheets:
+            raise SheetsServiceError("A planilha nao possui abas para operacao de exclusao.")
+
         for sheet in meta.get("sheets", []):
             props = sheet.get("properties", {})
             if props.get("title") == title:
                 return int(props.get("sheetId"))
+
+        for sheet in sheets:
+            props = sheet.get("properties", {})
+            current_title = str(props.get("title") or "")
+            if self._normalize_text(current_title) == normalized_title:
+                return int(props.get("sheetId"))
+
+        if len(sheets) == 1:
+            props = sheets[0].get("properties", {})
+            return int(props.get("sheetId"))
 
         raise SheetsServiceError("Aba configurada nao encontrada para exclusao.")
 

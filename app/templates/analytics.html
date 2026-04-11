@@ -228,7 +228,7 @@
                         <h4 class="text-lg font-bold text-on-surface">Analise Individual por Local</h4>
                         <p class="text-xs text-on-surface-variant mt-1">Detalhamento dos chamados do local selecionado no período atual ({{ period_label }}).</p>
                     </div>
-                    <form method="get" class="flex items-end gap-2">
+                    <form id="detail-local-form" method="get" class="flex items-end gap-2">
                         <input type="hidden" name="period" value="{{ period }}" />
                         <label class="text-xs font-bold text-on-surface-variant">Local
                             <select name="detail_local" class="mt-1 rounded-lg border-surface-variant text-sm min-w-[260px]">
@@ -383,6 +383,32 @@
     const allLocalsCheckbox = document.getElementById("all-locals-checkbox");
     const localsCheckboxesWrap = document.getElementById("export-locals-checkboxes");
     const exportForm = document.getElementById("export-form");
+    const detailLocalForm = document.getElementById("detail-local-form");
+
+    if (detailLocalForm) {
+        detailLocalForm.addEventListener("submit", () => {
+            try {
+                sessionStorage.setItem("analyticsScrollY", String(window.scrollY || 0));
+            } catch (e) {
+                // noop
+            }
+        });
+
+        window.addEventListener("pageshow", () => {
+            try {
+                const stored = sessionStorage.getItem("analyticsScrollY");
+                if (stored !== null) {
+                    const y = Number(stored);
+                    if (!Number.isNaN(y)) {
+                        window.scrollTo(0, y);
+                    }
+                    sessionStorage.removeItem("analyticsScrollY");
+                }
+            } catch (e) {
+                // noop
+            }
+        });
+    }
 
     function hideExportModal() {
         exportModal.hidden = true;

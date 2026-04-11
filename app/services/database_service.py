@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 import time
+from datetime import datetime
 from pathlib import Path
 
 from app.models.ticket import Ticket
@@ -24,7 +26,9 @@ class DatabaseService:
                 """
                 CREATE TABLE IF NOT EXISTS tickets (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    sheet_row_number INTEGER UNIQUE NOT NULL,
+                    ticket_uid TEXT UNIQUE NOT NULL,
+                    sheet_row_number INTEGER,
+                    in_sheet INTEGER DEFAULT 1,
                     data_hora TEXT,
                     local TEXT,
                     problema TEXT,
@@ -58,24 +62,163 @@ class DatabaseService:
             if "note" not in column_names:
                 conn.execute("ALTER TABLE resolution_reasons ADD COLUMN note TEXT DEFAULT ''")
 
+            self._migrate_tickets_schema_if_needed(conn)
+
             ticket_columns = conn.execute("PRAGMA table_info(tickets)").fetchall()
             ticket_column_names = {row[1] for row in ticket_columns}
             if "status_lock_until" not in ticket_column_names:
                 conn.execute("ALTER TABLE tickets ADD COLUMN status_lock_until INTEGER DEFAULT 0")
+            if "in_sheet" not in ticket_column_names:
+                conn.execute("ALTER TABLE tickets ADD COLUMN in_sheet INTEGER DEFAULT 1")
+            if "sheet_row_number" not in ticket_column_names:
+                conn.execute("ALTER TABLE tickets ADD COLUMN sheet_row_number INTEGER")
+            if "ticket_uid" not in ticket_column_names:
+                conn.execute("ALTER TABLE tickets ADD COLUMN ticket_uid TEXT")
+
+            # Legacy migration from old schema keyed by sheet_row_number
+            if "ticket_uid" in ticket_column_names and "sheet_row_number" in ticket_column_names:
+                rows = conn.execute(
+                    "SELECT id, ticket_uid, data_hora, local, problema, solicitante FROM tickets"
+                ).fetchall()
+                for row in rows:
+                    if row["ticket_uid"]:
+                        continue
+                    uid = self._build_ticket_uid(
+                        data_hora=row["data_hora"] or "",
+                        local=row["local"] or "",
+                        problema=row["problema"] or "",
+                        solicitante=row["solicitante"] or "",
+                    )
+                    conn.execute("UPDATE tickets SET ticket_uid = ? WHERE id = ?", (uid, row["id"]))
+
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_uid ON tickets(ticket_uid)")
             conn.commit()
+
+    def _migrate_tickets_schema_if_needed(self, conn: sqlite3.Connection) -> None:
+        info_rows = conn.execute("PRAGMA table_info(tickets)").fetchall()
+        if not info_rows:
+            return
+
+        by_name = {row[1]: row for row in info_rows}
+        sheet_row_notnull = int(by_name.get("sheet_row_number", [None, None, None, 0])[3] or 0) == 1
+        needs_uid = "ticket_uid" not in by_name
+        needs_in_sheet = "in_sheet" not in by_name
+
+        unique_on_sheet_row = False
+        for idx in conn.execute("PRAGMA index_list(tickets)").fetchall():
+            # idx format: (seq, name, unique, origin, partial)
+            idx_name = idx[1]
+            idx_unique = int(idx[2]) == 1
+            if not idx_unique:
+                continue
+            cols = conn.execute(f"PRAGMA index_info('{idx_name}')").fetchall()
+            for col in cols:
+                # col format: (seqno, cid, name)
+                if str(col[2]) == "sheet_row_number":
+                    unique_on_sheet_row = True
+                    break
+            if unique_on_sheet_row:
+                break
+
+        if not (sheet_row_notnull or unique_on_sheet_row or needs_uid or needs_in_sheet):
+            return
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tickets_migrated (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_uid TEXT UNIQUE NOT NULL,
+                sheet_row_number INTEGER,
+                in_sheet INTEGER DEFAULT 1,
+                data_hora TEXT,
+                local TEXT,
+                problema TEXT,
+                solicitante TEXT,
+                status TEXT,
+                resolution_reason TEXT DEFAULT '',
+                status_lock_until INTEGER DEFAULT 0
+            )
+            """
+        )
+
+        old_rows = conn.execute(
+            """
+            SELECT id, sheet_row_number, data_hora, local, problema, solicitante, status, resolution_reason, status_lock_until, ticket_uid, in_sheet
+            FROM tickets
+            ORDER BY id ASC
+            """
+        ).fetchall()
+
+        for row in old_rows:
+            raw_uid = row[9] if len(row) > 9 else None
+            base_uid = str(raw_uid or "").strip()
+            if not base_uid:
+                base_uid = self._build_ticket_uid(
+                    data_hora=str(row[2] or ""),
+                    local=str(row[3] or ""),
+                    problema=str(row[4] or ""),
+                    solicitante=str(row[5] or ""),
+                )
+
+            uid = base_uid
+            suffix = 1
+            while conn.execute(
+                "SELECT 1 FROM tickets_migrated WHERE ticket_uid = ?",
+                (uid,),
+            ).fetchone():
+                suffix += 1
+                uid = f"{base_uid}-{suffix}"
+
+            in_sheet = row[10] if len(row) > 10 else 1
+            if in_sheet is None:
+                in_sheet = 1
+
+            conn.execute(
+                """
+                INSERT INTO tickets_migrated (
+                    id, ticket_uid, sheet_row_number, in_sheet, data_hora, local, problema, solicitante, status, resolution_reason, status_lock_until
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row[0],
+                    uid,
+                    row[1],
+                    int(in_sheet),
+                    row[2] or "",
+                    row[3] or "",
+                    row[4] or "",
+                    row[5] or "",
+                    row[6] or "Em aberto",
+                    row[7] or "",
+                    row[8] or 0,
+                ),
+            )
+
+        conn.execute("DROP TABLE tickets")
+        conn.execute("ALTER TABLE tickets_migrated RENAME TO tickets")
 
     def upsert_tickets_from_sheet(self, tickets: list[Ticket]) -> None:
         with self._connect() as conn:
-            incoming_row_numbers = {int(ticket.row_number) for ticket in tickets}
+            incoming_uids: set[str] = set()
 
             for ticket in tickets:
                 normalized_requester = self._normalize_requester_name(ticket.solicitante)
+                ticket_uid = self._build_ticket_uid(
+                    data_hora=ticket.data_hora,
+                    local=ticket.local,
+                    problema=ticket.problema,
+                    solicitante=normalized_requester,
+                )
+                incoming_uids.add(ticket_uid)
+
                 conn.execute(
                     """
                     INSERT INTO tickets (
-                        sheet_row_number, data_hora, local, problema, solicitante, status, resolution_reason
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(sheet_row_number) DO UPDATE SET
+                        ticket_uid, sheet_row_number, in_sheet, data_hora, local, problema, solicitante, status, resolution_reason
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(ticket_uid) DO UPDATE SET
+                        sheet_row_number=excluded.sheet_row_number,
+                        in_sheet=1,
                         data_hora=excluded.data_hora,
                         local=excluded.local,
                         problema=excluded.problema,
@@ -86,14 +229,7 @@ class DatabaseService:
                             THEN tickets.status
                             ELSE excluded.status
                         END,
-                        resolution_reason=CASE
-                            WHEN tickets.data_hora = excluded.data_hora
-                             AND tickets.local = excluded.local
-                             AND tickets.problema = excluded.problema
-                             AND tickets.solicitante = excluded.solicitante
-                            THEN tickets.resolution_reason
-                            ELSE ''
-                        END,
+                        resolution_reason=tickets.resolution_reason,
                         status_lock_until=CASE
                             WHEN tickets.status_lock_until > CAST(strftime('%s','now') AS INTEGER)
                                  AND excluded.status <> tickets.status
@@ -102,7 +238,9 @@ class DatabaseService:
                         END
                     """,
                     (
+                        ticket_uid,
                         ticket.row_number,
+                        1,
                         ticket.data_hora,
                         ticket.local,
                         ticket.problema,
@@ -112,21 +250,19 @@ class DatabaseService:
                     ),
                 )
 
-            if incoming_row_numbers:
-                placeholders = ",".join("?" for _ in incoming_row_numbers)
+            if incoming_uids:
+                placeholders = ",".join("?" for _ in incoming_uids)
                 conn.execute(
-                    f"DELETE FROM tickets WHERE sheet_row_number NOT IN ({placeholders})",
-                    tuple(sorted(incoming_row_numbers)),
+                    f"UPDATE tickets SET in_sheet = 0, sheet_row_number = NULL WHERE ticket_uid NOT IN ({placeholders})",
+                    tuple(sorted(incoming_uids)),
                 )
             else:
-                conn.execute("DELETE FROM tickets")
+                conn.execute("UPDATE tickets SET in_sheet = 0, sheet_row_number = NULL")
 
             conn.commit()
 
     def replace_tickets_from_sheet(self, tickets: list[Ticket]) -> None:
-        with self._connect() as conn:
-            conn.execute("DELETE FROM tickets")
-            conn.commit()
+        # Keep historical tickets. Just reconcile against latest sheet snapshot.
         self.upsert_tickets_from_sheet(tickets)
 
     @staticmethod
@@ -142,15 +278,15 @@ class DatabaseService:
         with self._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT sheet_row_number, data_hora, local, problema, solicitante, status, resolution_reason
+                SELECT id, data_hora, local, problema, solicitante, status, resolution_reason
                 FROM tickets
-                ORDER BY sheet_row_number DESC
+                ORDER BY id DESC
                 """
             ).fetchall()
 
-        return [
+        tickets = [
             Ticket(
-                row_number=row["sheet_row_number"],
+                row_number=row["id"],
                 data_hora=row["data_hora"] or "",
                 local=row["local"] or "",
                 problema=row["problema"] or "",
@@ -161,6 +297,15 @@ class DatabaseService:
             for row in rows
         ]
 
+        tickets.sort(
+            key=lambda ticket: (
+                self._parse_ticket_datetime(ticket.data_hora),
+                int(ticket.row_number),
+            ),
+            reverse=True,
+        )
+        return tickets
+
     def set_ticket_status(self, row_number: int, status: str, resolution_reason: str) -> None:
         canonical_status = self._canonical_status(status)
         lock_until = int(time.time()) + 120
@@ -169,7 +314,7 @@ class DatabaseService:
                 """
                 UPDATE tickets
                 SET status = ?, resolution_reason = ?, status_lock_until = ?
-                WHERE sheet_row_number = ?
+                WHERE id = ?
                 """,
                 (canonical_status, resolution_reason, lock_until, row_number),
             )
@@ -177,16 +322,14 @@ class DatabaseService:
 
     def normalize_all_requester_names(self) -> None:
         with self._connect() as conn:
-            rows = conn.execute(
-                "SELECT sheet_row_number, solicitante FROM tickets"
-            ).fetchall()
+            rows = conn.execute("SELECT id, solicitante FROM tickets").fetchall()
 
             for row in rows:
                 normalized = self._normalize_requester_name(row["solicitante"] or "")
                 if normalized != (row["solicitante"] or ""):
                     conn.execute(
-                        "UPDATE tickets SET solicitante = ? WHERE sheet_row_number = ?",
-                        (normalized, row["sheet_row_number"]),
+                        "UPDATE tickets SET solicitante = ? WHERE id = ?",
+                        (normalized, row["id"]),
                     )
 
             conn.commit()
@@ -195,7 +338,7 @@ class DatabaseService:
         lock_until = int(time.time()) + 120
         with self._connect() as conn:
             exists = conn.execute(
-                "SELECT 1 FROM tickets WHERE sheet_row_number = ?",
+                "SELECT 1 FROM tickets WHERE id = ?",
                 (row_number,),
             ).fetchone()
             if not exists:
@@ -205,7 +348,7 @@ class DatabaseService:
                 """
                 UPDATE tickets
                 SET resolution_reason = ?, status_lock_until = ?
-                WHERE sheet_row_number = ?
+                WHERE id = ?
                 """,
                 (resolution_reason, lock_until, row_number),
             )
@@ -215,7 +358,7 @@ class DatabaseService:
     def get_ticket_reason(self, row_number: int) -> str:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT resolution_reason FROM tickets WHERE sheet_row_number = ?",
+                "SELECT resolution_reason FROM tickets WHERE id = ?",
                 (row_number,),
             ).fetchone()
         if not row:
@@ -225,12 +368,45 @@ class DatabaseService:
     def get_ticket_status(self, row_number: int) -> str:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT status FROM tickets WHERE sheet_row_number = ?",
+                "SELECT status FROM tickets WHERE id = ?",
                 (row_number,),
             ).fetchone()
         if not row:
             return ""
         return self._canonical_status(str(row["status"] or ""))
+
+    def get_sheet_row_for_ticket(self, row_number: int) -> int | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT sheet_row_number, in_sheet FROM tickets WHERE id = ?",
+                (row_number,),
+            ).fetchone()
+        if not row:
+            return None
+        if int(row["in_sheet"] or 0) != 1:
+            return None
+        if row["sheet_row_number"] is None:
+            return None
+        return int(row["sheet_row_number"])
+
+    def get_ticket_snapshot(self, row_number: int) -> dict[str, str] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT data_hora, local, problema, solicitante
+                FROM tickets
+                WHERE id = ?
+                """,
+                (row_number,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "data_hora": str(row["data_hora"] or ""),
+            "local": str(row["local"] or ""),
+            "problema": str(row["problema"] or ""),
+            "solicitante": str(row["solicitante"] or ""),
+        }
 
     @staticmethod
     def _canonical_status(status: str) -> str:
@@ -318,28 +494,39 @@ class DatabaseService:
 
     def delete_ticket(self, row_number: int) -> None:
         with self._connect() as conn:
-            conn.execute("DELETE FROM tickets WHERE sheet_row_number = ?", (row_number,))
+            conn.execute("DELETE FROM tickets WHERE id = ?", (row_number,))
             conn.commit()
 
     def shift_row_numbers_after_delete(self, deleted_row_number: int) -> None:
+        # No-op with stable local IDs
+        return
+
+    def shift_sheet_row_numbers_after_remote_delete(self, deleted_sheet_row: int) -> None:
+        if deleted_sheet_row < 2:
+            return
         with self._connect() as conn:
-            rows = conn.execute(
+            # Two-step shift avoids transient UNIQUE collisions on sheet_row_number.
+            offset = 1000000
+            conn.execute(
                 """
-                SELECT sheet_row_number
-                FROM tickets
-                WHERE sheet_row_number > ?
-                ORDER BY sheet_row_number ASC
+                UPDATE tickets
+                SET sheet_row_number = sheet_row_number + ?
+                WHERE in_sheet = 1
+                  AND sheet_row_number IS NOT NULL
+                  AND sheet_row_number > ?
                 """,
-                (deleted_row_number,),
-            ).fetchall()
-
-            for row in rows:
-                current = int(row["sheet_row_number"])
-                conn.execute(
-                    "UPDATE tickets SET sheet_row_number = ? WHERE sheet_row_number = ?",
-                    (current - 1, current),
-                )
-
+                (offset, deleted_sheet_row),
+            )
+            conn.execute(
+                """
+                UPDATE tickets
+                SET sheet_row_number = sheet_row_number - ?
+                WHERE in_sheet = 1
+                  AND sheet_row_number IS NOT NULL
+                  AND sheet_row_number >= ?
+                """,
+                (offset + 1, deleted_sheet_row + offset + 1),
+            )
             conn.commit()
 
     def list_distinct_locals(self) -> list[str]:
@@ -428,9 +615,43 @@ class DatabaseService:
 
         return [
             {
-                "requester": row["solicitante"],
-                "local": row["local"] or "--",
-                "total": row["total"],
+                "label": row["solicitante"],
+                "local": row["local"],
+                "total": int(row["total"]),
             }
             for row in rows
         ]
+
+    @staticmethod
+    def _build_ticket_uid(*, data_hora: str, local: str, problema: str, solicitante: str) -> str:
+        payload = "|".join(
+            [
+                (data_hora or "").strip().lower(),
+                (local or "").strip().lower(),
+                (problema or "").strip().lower(),
+                (solicitante or "").strip().lower(),
+            ]
+        )
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _parse_ticket_datetime(raw_value: str) -> datetime:
+        text = (raw_value or "").strip()
+        if not text:
+            return datetime.min
+
+        patterns = (
+            "%d/%m/%Y %H:%M:%S",
+            "%d/%m/%Y %H:%M",
+            "%m/%d/%Y %H:%M:%S",
+            "%m/%d/%Y %H:%M",
+            "%d/%m/%Y",
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d",
+        )
+        for pattern in patterns:
+            try:
+                return datetime.strptime(text, pattern)
+            except ValueError:
+                continue
+        return datetime.min

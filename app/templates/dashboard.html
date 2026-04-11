@@ -92,7 +92,6 @@
                 <table class="min-w-full text-left text-sm">
                     <thead class="bg-surface-soft text-[11px] uppercase tracking-wide text-muted">
                         <tr>
-                            <th class="px-4 py-3 font-bold">#</th>
                             <th class="px-4 py-3 font-bold">Horario</th>
                             <th class="px-4 py-3 font-bold">Local</th>
                             <th class="px-4 py-3 font-bold">Solicitante</th>
@@ -102,7 +101,6 @@
                     <tbody>
                         {% for ticket in latest_tickets %}
                             <tr class="border-t border-line">
-                                <td class="px-4 py-3 font-semibold text-ink">{{ ticket.row_number }}</td>
                                 <td class="px-4 py-3 text-muted">{{ ticket.data_hora }}</td>
                                 <td class="px-4 py-3 text-ink" style="{% if local_color_map.get(ticket.local) %}color: {{ local_color_map.get(ticket.local) }}; font-weight: 800;{% endif %}">{{ ticket.local }}</td>
                                 <td class="px-4 py-3 text-muted">{{ ticket.solicitante }}</td>
@@ -113,7 +111,7 @@
                             </tr>
                         {% else %}
                             <tr>
-                                <td colspan="5" class="px-4 py-8 text-center text-sm text-muted">Nenhum chamado encontrado.</td>
+                                <td colspan="4" class="px-4 py-8 text-center text-sm text-muted">Nenhum chamado encontrado.</td>
                             </tr>
                         {% endfor %}
                     </tbody>
