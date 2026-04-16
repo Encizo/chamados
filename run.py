@@ -10,13 +10,14 @@ app = create_app()
 def sync_background_loop() -> None:
     sync_service = app.extensions.get("sync_service")
     if not sync_service:
+        print("SYNC: serviço não encontrado")
         return
 
     while True:
         try:
             sync_service.maybe_sync()
-        except Exception:
-            pass
+        except Exception as e:
+            print("SYNC ERROR:", e)
         time.sleep(3)
 
 
