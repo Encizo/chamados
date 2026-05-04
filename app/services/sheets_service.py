@@ -153,8 +153,9 @@ class SheetsService:
 
         service = self._build_client(readonly=False)
         normalized_status = self._status_to_sheet_value(status)
-        sheet_name = self._get_sheet_name()
-        update_range = f"{sheet_name}!E{row_number}"
+        sheet_title = self._resolve_sheet_title(service)
+        escaped_title = sheet_title.replace("'", "''")
+        update_range = f"'{escaped_title}'!E{row_number}"
 
         try:
             service.spreadsheets().values().update(
@@ -239,8 +240,7 @@ class SheetsService:
 
     def _get_sheet_gid(self, service) -> int:
         meta = service.spreadsheets().get(spreadsheetId=self.sheet_id).execute()
-        title = self._get_sheet_title()
-        normalized_title = self._normalize_text(title)
+        title = self._resolve_sheet_title(service, preloaded_meta=meta)
 
         sheets = meta.get("sheets", [])
         if not sheets:
@@ -251,17 +251,33 @@ class SheetsService:
             if props.get("title") == title:
                 return int(props.get("sheetId"))
 
-        for sheet in sheets:
-            props = sheet.get("properties", {})
-            current_title = str(props.get("title") or "")
-            if self._normalize_text(current_title) == normalized_title:
-                return int(props.get("sheetId"))
-
-        if len(sheets) == 1:
-            props = sheets[0].get("properties", {})
-            return int(props.get("sheetId"))
-
         raise SheetsServiceError("Aba configurada nao encontrada para exclusao.")
+
+    def _resolve_sheet_title(self, service, preloaded_meta: dict | None = None) -> str:
+        meta = preloaded_meta or service.spreadsheets().get(spreadsheetId=self.sheet_id).execute()
+        configured_name = self._get_sheet_title()
+        configured_norm = self._normalize_text(configured_name)
+
+        sheet_titles = [
+            str(sheet.get("properties", {}).get("title", ""))
+            for sheet in meta.get("sheets", [])
+            if sheet.get("properties", {}).get("title")
+        ]
+        if not sheet_titles:
+            raise SheetsServiceError("A planilha nao possui abas configuradas.")
+
+        for title in sheet_titles:
+            if title == configured_name:
+                return title
+
+        for title in sheet_titles:
+            if self._normalize_text(title) == configured_norm:
+                return title
+
+        if len(sheet_titles) == 1:
+            return sheet_titles[0]
+
+        raise SheetsServiceError("Aba configurada nao encontrada.")
 
     @staticmethod
     def _status_to_sheet_value(status: str) -> str:

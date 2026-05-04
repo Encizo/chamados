@@ -22,15 +22,30 @@
         }
     };
 
-    const localColorMap = {{ local_color_map|tojson }};
+    const localPriorityMap = {{ local_priority_map|tojson }};
+    const localPriorityStyles = {{ local_priority_styles|tojson }};
 
-    function localColorStyle(localName) {
+    function localPriorityFor(localName) {
         const key = (localName || "").trim();
-        const color = localColorMap[key];
-        if (!color) {
-            return {};
+        return localPriorityMap[key] || "default";
+    }
+
+    function applyRowPriorityStyle(row, localName) {
+        if (!row) {
+            return;
         }
-        return { color, fontWeight: "800" };
+        row.style.backgroundColor = "";
+        row.style.borderLeft = "";
+    }
+
+    function applyLocalTextStyle(cell, localName) {
+        const group = localPriorityFor(localName);
+        const style = localPriorityStyles[group] || localPriorityStyles.default;
+        if (!cell || !style) {
+            return;
+        }
+        cell.style.color = style.text || "";
+        cell.style.fontWeight = "800";
     }
 </script>
 {% endblock %}
@@ -123,9 +138,11 @@
             </thead>
             <tbody id="tickets-body">
                 {% for ticket in tickets %}
+                    {% set priority = local_priority_map.get(ticket.local, 'default') %}
+                    {% set pstyle = local_priority_styles.get(priority, local_priority_styles.get('default')) %}
                     <tr data-row-number="{{ ticket.row_number }}">
                         <td>{{ ticket.data_hora }}</td>
-                        <td style="{% if local_color_map.get(ticket.local) %}color: {{ local_color_map.get(ticket.local) }}; font-weight: 800;{% endif %}">{{ ticket.local }}</td>
+                        <td style="color: {{ pstyle.text }}; font-weight: 800;">{{ ticket.local }}</td>
                         <td>{{ ticket.problema }}</td>
                         <td>{{ ticket.solicitante }}</td>
                         <td>
@@ -220,6 +237,7 @@
     let pendingDeleteRowNumber = null;
     const rowSyncLocks = new Map();
     const deletingRows = new Set();
+    let lastTicketsSignature = "";
 
     function setError(message) {
         if (!message) {
@@ -359,7 +377,7 @@
         tr.dataset.rowNumber = String(ticket.row_number);
         tr.appendChild(createTextCell(ticket.data_hora));
         const localCell = createTextCell(ticket.local);
-        Object.assign(localCell.style, localColorStyle(ticket.local));
+        applyLocalTextStyle(localCell, ticket.local);
         tr.appendChild(localCell);
         tr.appendChild(createTextCell(ticket.problema));
         tr.appendChild(createTextCell(ticket.solicitante));
@@ -374,6 +392,7 @@
         deleteBtn.textContent = "Excluir";
         deleteCell.appendChild(deleteBtn);
         tr.appendChild(deleteCell);
+        applyRowPriorityStyle(tr, ticket.local);
         return tr;
     }
 
@@ -385,9 +404,8 @@
 
         cells[0].textContent = ticket.data_hora || "";
         cells[1].textContent = ticket.local || "";
-        cells[1].style.color = "";
-        cells[1].style.fontWeight = "";
-        Object.assign(cells[1].style, localColorStyle(ticket.local));
+        applyLocalTextStyle(cells[1], ticket.local);
+        applyRowPriorityStyle(row, ticket.local);
         cells[2].textContent = ticket.problema || "";
         cells[3].textContent = ticket.solicitante || "";
         updateRowStatusOnly(String(ticket.row_number), normalizeStatus(ticket.status));
@@ -591,6 +609,17 @@
         knownRows.clear();
         incomingRows.forEach((item) => knownRows.add(item));
 
+        lastTicketsSignature = tickets
+            .map((ticket) => [
+                String(ticket.row_number),
+                String(ticket.status || ""),
+                String(ticket.resolution_reason || ""),
+                String(ticket.local || ""),
+                String(ticket.problema || ""),
+                String(ticket.solicitante || ""),
+            ].join("|"))
+            .join("||");
+
         pendingNewCount += insertedCount;
         refreshNewTicketsChip();
         renderGlobalSummary();
@@ -643,7 +672,21 @@
             if (payload.pagination && Number.isInteger(payload.pagination.total_items)) {
                 globalTotalItems = payload.pagination.total_items;
             }
-            reconcileTickets(tickets);
+
+            const incomingSignature = tickets
+                .map((ticket) => [
+                    String(ticket.row_number),
+                    String(ticket.status || ""),
+                    String(ticket.resolution_reason || ""),
+                    String(ticket.local || ""),
+                    String(ticket.problema || ""),
+                    String(ticket.solicitante || ""),
+                ].join("|"))
+                .join("||");
+
+            if (incomingSignature !== lastTicketsSignature) {
+                reconcileTickets(tickets);
+            }
             setError(payload.error || "");
         } catch (err) {
             setError(err.message || "Erro inesperado ao atualizar os chamados.");

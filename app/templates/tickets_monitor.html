@@ -38,13 +38,43 @@
             margin: 0;
             font-family: "Manrope", sans-serif;
         }
-        .pulse-new {
-            animation: pulseNew 1.8s ease-in-out infinite;
+        .pulse-open {
+            animation: pulseOpen 2.6s cubic-bezier(.4,0,.2,1) infinite;
         }
-        @keyframes pulseNew {
-            0% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.12); }
-            70% { box-shadow: 0 0 0 14px rgba(0, 0, 0, 0); }
+        @keyframes pulseOpen {
+            0% { box-shadow: 0 0 0 0 rgba(31, 95, 102, 0.26); }
+            65% { box-shadow: 0 0 0 14px rgba(31, 95, 102, 0); }
             100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
+        }
+
+        .ticker-wrap {
+            width: 100%;
+            height: 56px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .ticker-track {
+            position: absolute;
+            inset: 0;
+        }
+
+        .ticker-item {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            white-space: nowrap;
+            font-size: 1.12rem;
+            font-weight: 800;
+            color: var(--ink, #1a1f24);
+            padding: 9px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--line, #d8e0e6);
+            background: var(--surface, #ffffff);
+            max-width: min(72vw, 560px);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.1;
         }
     </style>
 </head>
@@ -55,12 +85,44 @@
                 <div>
                     <p class="text-xs font-extrabold uppercase tracking-[0.15em] text-white/85">Painel ao vivo</p>
                     <h1 class="text-3xl lg:text-4xl font-black tracking-tight">{{ branding.tickets_title }} - Monitor TV</h1>
-                    <p class="text-sm text-white/85 mt-1">Exibicao continua dos chamados. Dica: pressione F11 para tela cheia.</p>
+                    <p class="text-sm text-white/85 mt-1">Exibicao continua dos chamados em tempo real.</p>
                 </div>
-                <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wide rounded-full border border-white/25 bg-white/10 px-4 py-2 w-fit">
-                    <span class="material-symbols-outlined text-base">tv</span>
-                    Atualizacao automatica
+                <div class="flex flex-col items-end gap-2">
+                    <div class="flex items-center gap-2 text-xs font-bold uppercase tracking-wide rounded-full border border-white/25 bg-white/10 px-4 py-2 w-fit">
+                        <span class="material-symbols-outlined text-base">tv</span>
+                        Atualizacao automatica
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="toggle-fullscreen-btn" type="button" class="inline-flex items-center justify-center rounded-lg border border-white/35 bg-white/10 w-9 h-9 hover:bg-white/20" title="Alternar tela cheia" aria-label="Alternar tela cheia">
+                            <svg id="fullscreen-enter-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4">
+                                <path d="M8 3H3v5"></path>
+                                <path d="M16 3h5v5"></path>
+                                <path d="M8 21H3v-5"></path>
+                                <path d="M16 21h5v-5"></path>
+                                <path d="M3 3l7 7"></path>
+                                <path d="M21 3l-7 7"></path>
+                                <path d="M3 21l7-7"></path>
+                                <path d="M21 21l-7-7"></path>
+                            </svg>
+                            <svg id="fullscreen-exit-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 hidden">
+                                <path d="M10 10L3 3"></path>
+                                <path d="M14 10l7-7"></path>
+                                <path d="M10 14l-7 7"></path>
+                                <path d="M14 14l7 7"></path>
+                                <path d="M3 8V3h5"></path>
+                                <path d="M16 3h5v5"></path>
+                                <path d="M3 16v5h5"></path>
+                                <path d="M16 21h5v-5"></path>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
+            </div>
+        </section>
+
+        <section class="rounded-xl border border-line bg-surface px-4 py-3 overflow-hidden">
+            <div class="ticker-wrap">
+                <div class="ticker-track" id="monitor-ticker-track"></div>
             </div>
         </section>
 
@@ -82,7 +144,9 @@
 
             <aside class="xl:col-span-4 space-y-4 h-full min-h-0 flex flex-col">
                 <article class="rounded-2xl border border-line bg-surface p-4 shadow-sm">
-                    <h2 class="text-sm font-black uppercase tracking-wide text-muted mb-3">Resumo rapido</h2>
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-sm font-black uppercase tracking-wide text-muted">Resumo rapido</h2>
+                    </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div class="rounded-xl border border-line bg-primary-soft p-3">
                             <p class="text-[11px] font-bold uppercase tracking-wide text-muted">Total</p>
@@ -106,7 +170,13 @@
                 <article class="rounded-2xl border border-line bg-surface p-4 shadow-sm flex-1 min-h-0 flex flex-col">
                     <div class="flex items-center justify-between mb-3">
                         <h2 class="text-sm font-black uppercase tracking-wide text-muted">Tickets em aberto</h2>
-                        <span id="open-count-chip" class="text-xs font-bold px-2 py-1 rounded-full bg-open-soft text-open">0</span>
+                        <div class="flex items-center gap-3">
+                            <div class="inline-flex items-center gap-1.5 rounded-lg border border-line bg-soft px-2 py-1">
+                                <img src="{{ url_for('static', filename='icons/relogio.png') }}" alt="Relogio" class="w-4 h-4 object-contain opacity-80" />
+                                <p id="monitor-clock" class="text-lg font-black tracking-wide text-ink leading-none">--:--:--</p>
+                            </div>
+                            <span id="open-count-chip" class="text-xs font-bold px-2 py-1 rounded-full bg-open-soft text-open">0</span>
+                        </div>
                     </div>
                     <div id="open-list" class="space-y-2 overflow-auto pr-1 flex-1 min-h-0"></div>
                 </article>
@@ -115,18 +185,27 @@
     </main>
 
     <script>
-        const localColorMap = {{ local_color_map|tojson }};
+        const localPriorityMap = {{ local_priority_map|tojson }};
+        const localPriorityStyles = {{ local_priority_styles|tojson }};
+        const tickerMessages = {{ monitor_ticker_messages|tojson }};
+        const monitorTimezone = {{ monitor_timezone|tojson }};
         const apiUrl = "{{ url_for('tickets.tickets_api') }}";
         const pollMs = 10000;
         let knownRows = new Set();
+        let lastMonitorSignature = "";
 
         function localStyle(localName) {
             const key = (localName || "").trim();
-            const color = localColorMap[key];
-            if (!color) {
-                return "";
-            }
-            return `style=\"color:${color};font-weight:800;\"`;
+            const group = localPriorityMap[key] || "default";
+            const style = localPriorityStyles[group] || localPriorityStyles.default;
+            return `style=\"color:${style.text};font-weight:800;\"`;
+        }
+
+        function localCardStyle(localName) {
+            const key = (localName || "").trim();
+            const group = localPriorityMap[key] || "default";
+            const style = localPriorityStyles[group] || localPriorityStyles.default;
+            return `style=\"background:${style.row_bg};border:1px solid ${style.row_border};\"`;
         }
 
         function statusClass(status) {
@@ -135,9 +214,9 @@
             return "bg-open-soft text-open-strong border border-line";
         }
 
-        function cardTemplate(ticket, isNew) {
+        function cardTemplate(ticket) {
             return `
-                <article class="rounded-xl border border-line bg-soft p-3 ${isNew ? "pulse-new" : ""}">
+                <article class="rounded-xl border border-line bg-soft p-3 ${ticket.status === "Em aberto" ? "pulse-open" : ""}" ${localCardStyle(ticket.local)}>
                     <div class="flex items-start justify-between gap-3">
                         <div>
                             <p class="text-xs text-muted">${ticket.data_hora || "--"}</p>
@@ -153,7 +232,7 @@
 
         function openItemTemplate(ticket) {
             return `
-                <div class="rounded-lg border border-line bg-soft px-3 py-2">
+                <div class="rounded-lg border border-line bg-soft px-3 py-2" ${localCardStyle(ticket.local)}>
                     <p class="text-xs text-muted">${ticket.data_hora || "--"}</p>
                     <p class="text-sm font-bold" ${localStyle(ticket.local)}>${ticket.local || "Sem local"}</p>
                     <p class="text-xs text-muted mt-1 line-clamp-2">${ticket.problema || "Sem descricao"}</p>
@@ -190,7 +269,7 @@
                 return;
             }
 
-            badge.textContent = `Linha #${oldest.row_number}`;
+            badge.textContent = "Chamado em aberto";
             badge.className = "text-xs font-bold px-2.5 py-1 rounded-full bg-open-soft text-open";
             card.innerHTML = `
                 <div class="flex items-start justify-between gap-3">
@@ -208,7 +287,7 @@
         function updateRecentGrid(tickets) {
             const target = document.getElementById("recent-tickets-grid");
             const recent = tickets.slice(0, 30);
-            target.innerHTML = recent.map((t) => cardTemplate(t, !knownRows.has(t.row_number))).join("");
+            target.innerHTML = recent.map((t) => cardTemplate(t)).join("");
         }
 
         function updateOpenList(tickets) {
@@ -226,8 +305,25 @@
                 const response = await fetch(`${apiUrl}?page=1&page_size=120`, { cache: "no-store" });
                 const payload = await response.json();
                 const tickets = payload.tickets || [];
+                const summaryTickets = payload.all_tickets || tickets;
 
-                updateSummary(tickets);
+                const incomingSignature = tickets
+                    .map((ticket) => [
+                        String(ticket.row_number),
+                        String(ticket.status || ""),
+                        String(ticket.resolution_reason || ""),
+                        String(ticket.local || ""),
+                        String(ticket.problema || ""),
+                        String(ticket.solicitante || ""),
+                    ].join("|"))
+                    .join("||");
+
+                if (incomingSignature === lastMonitorSignature) {
+                    return;
+                }
+                lastMonitorSignature = incomingSignature;
+
+                updateSummary(summaryTickets);
                 updateOldestOpen(tickets);
                 updateRecentGrid(tickets);
                 updateOpenList(tickets);
@@ -240,6 +336,147 @@
 
         refreshMonitor();
         setInterval(refreshMonitor, pollMs);
+
+        function isFullscreenActive() {
+            return Boolean(document.fullscreenElement);
+        }
+
+        function updateFullscreenButton() {
+            const enterIcon = document.getElementById("fullscreen-enter-icon");
+            const exitIcon = document.getElementById("fullscreen-exit-icon");
+            if (!enterIcon || !exitIcon) {
+                return;
+            }
+
+            if (isFullscreenActive()) {
+                enterIcon.classList.add("hidden");
+                exitIcon.classList.remove("hidden");
+            } else {
+                enterIcon.classList.remove("hidden");
+                exitIcon.classList.add("hidden");
+            }
+        }
+
+        function updateMonitorClock() {
+            const clock = document.getElementById("monitor-clock");
+            if (!clock) {
+                return;
+            }
+            try {
+                const now = new Date();
+                const formatter = new Intl.DateTimeFormat("pt-BR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    timeZone: monitorTimezone || "America/Sao_Paulo",
+                });
+                clock.textContent = formatter.format(now);
+            } catch (err) {
+                clock.textContent = new Date().toLocaleTimeString("pt-BR");
+            }
+        }
+
+        const fullscreenBtn = document.getElementById("toggle-fullscreen-btn");
+        if (fullscreenBtn) {
+            fullscreenBtn.addEventListener("click", async () => {
+                try {
+                    if (isFullscreenActive()) {
+                        await document.exitFullscreen();
+                    } else {
+                        await document.documentElement.requestFullscreen();
+                    }
+                } catch (err) {
+                    // ignore if browser blocks fullscreen
+                } finally {
+                    updateFullscreenButton();
+                }
+            });
+        }
+
+        document.addEventListener("fullscreenchange", updateFullscreenButton);
+        updateFullscreenButton();
+        updateMonitorClock();
+        setInterval(updateMonitorClock, 1000);
+
+        function setupTicker() {
+            const track = document.getElementById("monitor-ticker-track");
+            const wrap = track ? track.parentElement : null;
+            if (!track || !wrap) {
+                return;
+            }
+
+            const messages = (Array.isArray(tickerMessages) && tickerMessages.length)
+                ? tickerMessages
+                : [{ text: "Sem anuncios configurados.", bg: "#e8f1ff", textColor: "#1a1f24" }];
+
+            const gap = 28;
+            const speed = 76; // px/s
+            const items = messages.map((message) => {
+                const el = document.createElement("span");
+                el.className = "ticker-item";
+                const text = typeof message === "object" ? String(message.text || "") : String(message || "");
+                const bg = typeof message === "object" ? String(message.bg || "#e8f1ff") : "#e8f1ff";
+                const textColor = typeof message === "object" ? String(message.textColor || "#1a1f24") : "#1a1f24";
+                el.textContent = text || "Sem anuncios";
+                el.style.background = bg;
+                el.style.color = textColor;
+                track.appendChild(el);
+                return { el, x: 0, width: 0, offset: 0 };
+            });
+
+            let startX = wrap.clientWidth;
+            let pitch = 0;
+            let loopLen = 0;
+            let shift = 0;
+
+            function layoutInitial() {
+                startX = wrap.clientWidth;
+                let maxWidth = 0;
+                items.forEach((item) => {
+                    item.width = item.el.offsetWidth;
+                    if (item.width > maxWidth) {
+                        maxWidth = item.width;
+                    }
+                });
+
+                pitch = maxWidth + gap;
+                loopLen = Math.max(pitch * items.length, pitch);
+
+                items.forEach((item, index) => {
+                    item.offset = index * pitch;
+                    item.x = startX + item.offset;
+                    item.el.style.left = `${item.x}px`;
+                });
+            }
+
+            let lastTs = performance.now();
+            function tick(ts) {
+                const dt = Math.min((ts - lastTs) / 1000, 0.05);
+                lastTs = ts;
+
+                shift -= speed * dt;
+                while (shift <= -loopLen) {
+                    shift += loopLen;
+                }
+
+                items.forEach((item) => {
+                    let x = startX + item.offset + shift;
+                    while (x < -pitch) {
+                        x += loopLen;
+                    }
+                    item.x = x;
+                    item.el.style.left = `${item.x}px`;
+                });
+
+                requestAnimationFrame(tick);
+            }
+
+            layoutInitial();
+            requestAnimationFrame(tick);
+            window.addEventListener("resize", layoutInitial);
+        }
+
+        setupTicker();
     </script>
 </body>
 </html>

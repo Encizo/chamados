@@ -25,7 +25,9 @@ class Config:
         "APP_TICKETS_SUBTITLE",
         "Atendimento em tempo real integrado ao Google Forms e Google Sheets.",
     )
+    APP_MONITOR_TIMEZONE = os.getenv("APP_MONITOR_TIMEZONE", "America/Sao_Paulo")
+    APP_MONITOR_TICKER_JSON = os.getenv("APP_MONITOR_TICKER_JSON", "[]")
     APP_THEME_PALETTE = os.getenv("APP_THEME_PALETTE", "azul-tech")
-    APP_LOCAL_COLORS_JSON = os.getenv("APP_LOCAL_COLORS_JSON", "{}")
+    APP_LOCAL_PRIORITY_GROUPS_JSON = os.getenv("APP_LOCAL_PRIORITY_GROUPS_JSON", "{}")
     DATABASE_PATH = os.getenv("DATABASE_PATH", "data/chamados.db")
     SYNC_INTERVAL_SECONDS = int(os.getenv("SYNC_INTERVAL_SECONDS", "20"))

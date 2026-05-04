@@ -208,8 +208,8 @@ def _theme_color(name: str, fallback: str) -> str:
     return str(palette.get(name, fallback))
 
 
-def _load_local_colors() -> dict[str, str]:
-    raw = current_app.config.get("APP_LOCAL_COLORS_JSON", "{}")
+def _load_local_priority_groups() -> dict[str, str]:
+    raw = current_app.config.get("APP_LOCAL_PRIORITY_GROUPS_JSON", "{}")
     if not isinstance(raw, str):
         return {}
     try:
@@ -220,14 +220,115 @@ def _load_local_colors() -> dict[str, str]:
         return {}
 
     valid: dict[str, str] = {}
+    accepted = {"baixo", "medio", "alto", "urgente"}
     for key, value in payload.items():
         local_name = str(key or "").strip()
-        color = str(value or "").strip()
-        if not local_name or not color:
+        group = str(value or "").strip().lower()
+        if not local_name or group not in accepted:
             continue
-        if len(color) == 7 and color.startswith("#"):
-            valid[local_name] = color
+        valid[local_name] = group
     return valid
+
+
+def _local_priority_styles() -> dict[str, dict[str, str]]:
+    palette_key = str(current_app.config.get("APP_THEME_PALETTE", "azul-tech") or "azul-tech")
+
+    if palette_key == "azul-tech":
+        return {
+            "default": {
+                "label": "Sem prioridade",
+                "row_bg": _theme_color("surface", "#ffffff"),
+                "row_border": _theme_color("line", "#d8e0e6"),
+                "text": _theme_color("ink", "#1a1f24"),
+            },
+            "baixo": {
+                "label": "Baixo",
+                "row_bg": _theme_color("status-open-soft", "#edf1f4"),
+                "row_border": _theme_color("status-open", "#576772"),
+                "text": _theme_color("status-open-strong", "#404c56"),
+            },
+            "medio": {
+                "label": "Medio",
+                "row_bg": _theme_color("warn-soft", "#fff4df"),
+                "row_border": _theme_color("accent-warn", "#a96a0f"),
+                "text": _theme_color("accent-warn-strong", "#7a560b"),
+            },
+            "alto": {
+                "label": "Alto",
+                "row_bg": _theme_color("primary-soft", "#e8f1ff"),
+                "row_border": _theme_color("primary", "#005eb8"),
+                "text": _theme_color("primary-deep", "#00478d"),
+            },
+            "urgente": {
+                "label": "Urgente",
+                "row_bg": _theme_color("danger-soft", "#f7e6e2"),
+                "row_border": _theme_color("danger", "#a63d2f"),
+                "text": _theme_color("danger", "#a63d2f"),
+            },
+        }
+
+    return {
+        "default": {
+            "label": "Sem prioridade",
+            "row_bg": _theme_color("surface", "#ffffff"),
+            "row_border": _theme_color("line", "#d8e0e6"),
+            "text": _theme_color("ink", "#1a1f24"),
+        },
+        "baixo": {
+            "label": "Baixo",
+            "row_bg": _theme_color("status-open-soft", "#edf1f4"),
+            "row_border": _theme_color("status-open", "#576772"),
+            "text": _theme_color("status-open-strong", "#404c56"),
+        },
+        "medio": {
+            "label": "Medio",
+            "row_bg": _theme_color("warn-soft", "#fff4df"),
+            "row_border": _theme_color("accent-warn", "#a96a0f"),
+            "text": _theme_color("accent-warn-strong", "#7a560b"),
+        },
+        "alto": {
+            "label": "Alto",
+            "row_bg": _theme_color("primary-soft", "#e8f1ff"),
+            "row_border": _theme_color("primary", "#005eb8"),
+            "text": _theme_color("primary-deep", "#00478d"),
+        },
+        "urgente": {
+            "label": "Urgente",
+            "row_bg": "#ffecec",
+            "row_border": "#d24a35",
+            "text": "#a93628",
+        },
+    }
+
+
+def _load_monitor_ticker_messages() -> list[dict[str, str]]:
+    raw = current_app.config.get("APP_MONITOR_TICKER_JSON", "[]")
+    if not isinstance(raw, str):
+        return []
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(payload, list):
+        return []
+
+    messages: list[dict[str, str]] = []
+    default_bg = _theme_color("primary-soft", "#e8f1ff")
+    default_text = _theme_color("ink", "#1a1f24")
+    for item in payload:
+        if isinstance(item, dict):
+            text = str(item.get("text", "") or "").strip()
+            if not text:
+                continue
+            bg = str(item.get("bg", default_bg) or default_bg).strip()
+            text_color = str(item.get("textColor", default_text) or default_text).strip()
+            messages.append({"text": text, "bg": bg, "textColor": text_color})
+            continue
+
+        text = str(item or "").strip()
+        if text:
+            messages.append({"text": text, "bg": default_bg, "textColor": default_text})
+    return messages
 
 
 def _build_analytics_payload(
@@ -437,6 +538,9 @@ def dashboard():
     ]
     local_max = dashboard_local_stats[0]["total"] if dashboard_local_stats else 1
 
+    local_priority_map = _load_local_priority_groups()
+    local_priority_styles = _local_priority_styles()
+
     return render_template(
         "dashboard.html",
         tickets=tickets,
@@ -447,7 +551,8 @@ def dashboard():
         latest_tickets=latest_tickets,
         dashboard_local_stats=dashboard_local_stats,
         dashboard_local_max=local_max,
-        local_color_map=_load_local_colors(),
+        local_priority_map=local_priority_map,
+        local_priority_styles=local_priority_styles,
     )
 
 
@@ -460,6 +565,9 @@ def tickets_page():
     paged_tickets, pagination = _paginate_tickets(tickets, page=page, page_size=page_size)
     branding = _load_branding()
     db = DatabaseService(current_app.config["DATABASE_PATH"])
+    local_priority_map = _load_local_priority_groups()
+    local_priority_styles = _local_priority_styles()
+
     return render_template(
         "tickets.html",
         tickets=paged_tickets,
@@ -468,7 +576,8 @@ def tickets_page():
         branding=branding,
         resolution_reasons=db.list_resolution_reasons(),
         pagination=pagination,
-        local_color_map=_load_local_colors(),
+        local_priority_map=local_priority_map,
+        local_priority_styles=local_priority_styles,
     )
 
 
@@ -476,11 +585,17 @@ def tickets_page():
 @admin_required
 def tickets_monitor_page():
     branding = _load_branding()
+    local_priority_map = _load_local_priority_groups()
+    local_priority_styles = _local_priority_styles()
     return render_template(
         "tickets_monitor.html",
         branding=branding,
         theme_vars=current_app.config.get("APP_THEME_VARS", {}),
-        local_color_map=_load_local_colors(),
+        local_priority_map=local_priority_map,
+        local_priority_styles=local_priority_styles,
+        monitor_timezone=current_app.config.get("APP_MONITOR_TIMEZONE", "America/Sao_Paulo"),
+        monitor_time_label="Horario",
+        monitor_ticker_messages=_load_monitor_ticker_messages(),
     )
 
 
@@ -504,6 +619,18 @@ def tickets_api():
                     "resolution_reason": ticket.resolution_reason,
                 }
                 for ticket in paged_tickets
+            ],
+            "all_tickets": [
+                {
+                    "row_number": ticket.row_number,
+                    "data_hora": ticket.data_hora,
+                    "local": ticket.local,
+                    "problema": ticket.problema,
+                    "solicitante": ticket.solicitante,
+                    "status": ticket.status,
+                    "resolution_reason": ticket.resolution_reason,
+                }
+                for ticket in tickets
             ],
             "status_summary": status_summary,
             "error": error,
@@ -833,9 +960,11 @@ def settings_page():
         app_tickets_title = request.form.get("app_tickets_title", "").strip()
         app_dashboard_title = request.form.get("app_dashboard_title", "").strip()
         app_tickets_subtitle = request.form.get("app_tickets_subtitle", "").strip()
+        app_monitor_timezone = request.form.get("app_monitor_timezone", "").strip()
+        monitor_ticker_messages_json = request.form.get("app_monitor_ticker_messages_json", "").strip()
         app_theme_palette = request.form.get("app_theme_palette", "").strip().lower()
-        local_color_names = request.form.getlist("local_color_name")
-        local_color_values = request.form.getlist("local_color_value")
+        local_priority_names = request.form.getlist("local_priority_name")
+        local_priority_groups = request.form.getlist("local_priority_group")
         new_reason = request.form.get("new_resolution_reason", "").strip()
         new_reason_note = request.form.get("new_resolution_reason_note", "").strip()
         remove_reason = request.form.get("remove_resolution_reason", "").strip()
@@ -867,22 +996,48 @@ def settings_page():
         if app_tickets_subtitle:
             values["APP_TICKETS_SUBTITLE"] = app_tickets_subtitle
             current_app.config["APP_TICKETS_SUBTITLE"] = app_tickets_subtitle
+        if app_monitor_timezone:
+            values["APP_MONITOR_TIMEZONE"] = app_monitor_timezone
+            current_app.config["APP_MONITOR_TIMEZONE"] = app_monitor_timezone
+        ticker_items: list[dict[str, str]] = []
+        if monitor_ticker_messages_json:
+            try:
+                payload = json.loads(monitor_ticker_messages_json)
+                if isinstance(payload, list):
+                    for item in payload:
+                        if not isinstance(item, dict):
+                            continue
+                        text = str(item.get("text", "") or "").strip()
+                        if not text:
+                            continue
+                        bg = str(item.get("bg", _theme_color("primary-soft", "#e8f1ff")) or _theme_color("primary-soft", "#e8f1ff")).strip()
+                        text_color = str(item.get("textColor", _theme_color("ink", "#1a1f24")) or _theme_color("ink", "#1a1f24")).strip()
+                        if len(bg) != 7 or not bg.startswith("#"):
+                            bg = _theme_color("primary-soft", "#e8f1ff")
+                        if len(text_color) != 7 or not text_color.startswith("#"):
+                            text_color = _theme_color("ink", "#1a1f24")
+                        ticker_items.append({"text": text, "bg": bg, "textColor": text_color})
+            except json.JSONDecodeError:
+                ticker_items = []
+        values["APP_MONITOR_TICKER_JSON"] = json.dumps(ticker_items, ensure_ascii=False)
+        current_app.config["APP_MONITOR_TICKER_JSON"] = values["APP_MONITOR_TICKER_JSON"]
         if app_theme_palette:
             resolved_key, resolved_palette = resolve_palette(app_theme_palette)
             values["APP_THEME_PALETTE"] = resolved_key
             current_app.config["APP_THEME_PALETTE"] = resolved_key
             current_app.config["APP_THEME_VARS"] = resolved_palette["vars"]
 
-        color_map: dict[str, str] = {}
-        for idx, local_name in enumerate(local_color_names):
-            name = (local_name or "").strip()
-            color = (local_color_values[idx] if idx < len(local_color_values) else "").strip()
-            if not name or not color:
-                continue
-            if len(color) == 7 and color.startswith("#"):
-                color_map[name] = color
-        values["APP_LOCAL_COLORS_JSON"] = json.dumps(color_map, ensure_ascii=True, separators=(",", ":"))
-        current_app.config["APP_LOCAL_COLORS_JSON"] = values["APP_LOCAL_COLORS_JSON"]
+        if local_priority_names:
+            priority_map: dict[str, str] = {}
+            for idx, local_name in enumerate(local_priority_names):
+                name = (local_name or "").strip()
+                group = (local_priority_groups[idx] if idx < len(local_priority_groups) else "").strip().lower()
+                if not name or not group:
+                    continue
+                if group in {"baixo", "medio", "alto", "urgente"}:
+                    priority_map[name] = group
+            values["APP_LOCAL_PRIORITY_GROUPS_JSON"] = json.dumps(priority_map, ensure_ascii=True, separators=(",", ":"))
+            current_app.config["APP_LOCAL_PRIORITY_GROUPS_JSON"] = values["APP_LOCAL_PRIORITY_GROUPS_JSON"]
 
         if service_file and service_file.filename:
             if not service_file.filename.lower().endswith(".json"):
@@ -925,13 +1080,18 @@ def settings_page():
             "APP_TICKETS_SUBTITLE",
             "Atendimento em tempo real integrado ao Google Forms e Google Sheets.",
         ),
+        "app_monitor_timezone": current_app.config.get("APP_MONITOR_TIMEZONE", "America/Sao_Paulo"),
+        "app_monitor_ticker_messages_json": current_app.config.get("APP_MONITOR_TICKER_JSON", "[]"),
         "app_theme_palette": current_app.config.get("APP_THEME_PALETTE", "azul-tech"),
-        "app_local_colors_json": current_app.config.get("APP_LOCAL_COLORS_JSON", "{}"),
+        "app_local_priority_groups_json": current_app.config.get("APP_LOCAL_PRIORITY_GROUPS_JSON", "{}"),
     }
 
-    local_color_map = _load_local_colors()
+    monitor_ticker_messages = _load_monitor_ticker_messages()
+
+    local_priority_map = _load_local_priority_groups()
+    local_priority_styles = _local_priority_styles()
     local_options = db.list_distinct_locals()
-    for local_name in sorted(local_color_map.keys(), key=str.lower):
+    for local_name in sorted(local_priority_map.keys(), key=str.lower):
         if local_name not in local_options:
             local_options.append(local_name)
 
@@ -954,7 +1114,25 @@ def settings_page():
         resolution_reason_entries=db.list_resolution_reason_entries(),
         reason_usage_map=db.resolution_reason_usage_map(),
         local_options=local_options,
-        local_color_map=local_color_map,
+        local_priority_map=local_priority_map,
+        local_priority_styles=local_priority_styles,
+        monitor_ticker_messages=monitor_ticker_messages,
+        timezone_options=[
+            "UTC",
+            "America/Sao_Paulo",
+            "America/Manaus",
+            "America/Cuiaba",
+            "America/Fortaleza",
+            "America/Belem",
+            "America/Recife",
+            "America/Bahia",
+            "America/Rio_Branco",
+            "America/Araguaina",
+            "Europe/Lisbon",
+            "Europe/London",
+            "America/New_York",
+            "America/Mexico_City",
+        ],
     )
 
 
@@ -992,20 +1170,40 @@ def update_status(row_number: int):
     error = None
     try:
         sheet_row = db.get_sheet_row_for_ticket(row_number)
+        snapshot = db.get_ticket_snapshot(row_number)
         db.set_ticket_status(
             row_number=row_number,
             status=status,
             resolution_reason=resolution_reason,
         )
-        if sheet_row:
-            _schedule_sheet_write(
-                service_account_file=current_app.config["GOOGLE_SERVICE_ACCOUNT_FILE"],
-                sheet_id=current_app.config["GOOGLE_SHEETS_ID"],
-                sheet_range=current_app.config["GOOGLE_SHEETS_RANGE"],
-                action="status",
-                row_number=sheet_row,
-                status=status,
+        service = SheetsService(
+            service_account_file=current_app.config["GOOGLE_SERVICE_ACCOUNT_FILE"],
+            sheet_id=current_app.config["GOOGLE_SHEETS_ID"],
+            sheet_range=current_app.config["GOOGLE_SHEETS_RANGE"],
+        )
+
+        target_sheet_row = sheet_row
+        if not target_sheet_row and snapshot:
+            latest = service.fetch_tickets()
+            target_uid = DatabaseService._build_ticket_uid(
+                data_hora=snapshot["data_hora"],
+                local=snapshot["local"],
+                problema=snapshot["problema"],
+                solicitante=snapshot["solicitante"],
             )
+            for item in latest:
+                item_uid = DatabaseService._build_ticket_uid(
+                    data_hora=item.data_hora,
+                    local=item.local,
+                    problema=item.problema,
+                    solicitante=item.solicitante,
+                )
+                if item_uid == target_uid:
+                    target_sheet_row = item.row_number
+                    break
+
+        if target_sheet_row:
+            service.update_ticket_status(target_sheet_row, status)
     except Exception as exc:
         error = str(exc)
 

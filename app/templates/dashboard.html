@@ -100,9 +100,13 @@
                     </thead>
                     <tbody>
                         {% for ticket in latest_tickets %}
-                            <tr class="border-t border-line">
+                            {% set priority = local_priority_map.get(ticket.local, 'default') %}
+                            {% set pstyle = local_priority_styles.get(priority, local_priority_styles.get('default')) %}
+                            {% set priority = local_priority_map.get(ticket.local, 'default') %}
+                            {% set pstyle = local_priority_styles.get(priority, local_priority_styles.get('default')) %}
+                            <tr class="border-t border-line" style="background: {{ pstyle.row_bg }}; border-left: 4px solid {{ pstyle.row_border }};">
                                 <td class="px-4 py-3 text-muted">{{ ticket.data_hora }}</td>
-                                <td class="px-4 py-3 text-ink" style="{% if local_color_map.get(ticket.local) %}color: {{ local_color_map.get(ticket.local) }}; font-weight: 800;{% endif %}">{{ ticket.local }}</td>
+                                <td class="px-4 py-3" style="color: {{ pstyle.text }}; font-weight: 800;">{{ ticket.local }}</td>
                                 <td class="px-4 py-3 text-muted">{{ ticket.solicitante }}</td>
                                 <td class="px-4 py-3">
                                     {% set status = ticket.status %}
