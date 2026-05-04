@@ -421,31 +421,16 @@
                 el.style.background = bg;
                 el.style.color = textColor;
                 track.appendChild(el);
-                return { el, x: 0, width: 0, offset: 0 };
+                return { el, x: 0, width: 0 };
             });
 
-            let startX = wrap.clientWidth;
-            let pitch = 0;
-            let loopLen = 0;
-            let shift = 0;
-
             function layoutInitial() {
-                startX = wrap.clientWidth;
-                let maxWidth = 0;
+                let cursor = wrap.clientWidth;
                 items.forEach((item) => {
                     item.width = item.el.offsetWidth;
-                    if (item.width > maxWidth) {
-                        maxWidth = item.width;
-                    }
-                });
-
-                pitch = maxWidth + gap;
-                loopLen = Math.max(pitch * items.length, pitch);
-
-                items.forEach((item, index) => {
-                    item.offset = index * pitch;
-                    item.x = startX + item.offset;
+                    item.x = cursor;
                     item.el.style.left = `${item.x}px`;
+                    cursor += item.width + gap;
                 });
             }
 
@@ -454,17 +439,13 @@
                 const dt = Math.min((ts - lastTs) / 1000, 0.05);
                 lastTs = ts;
 
-                shift -= speed * dt;
-                while (shift <= -loopLen) {
-                    shift += loopLen;
-                }
-
+                items.sort((a, b) => a.x - b.x);
                 items.forEach((item) => {
-                    let x = startX + item.offset + shift;
-                    while (x < -pitch) {
-                        x += loopLen;
+                    item.x -= speed * dt;
+                    if (item.x + item.width < 0) {
+                        const rightMost = items.reduce((max, current) => Math.max(max, current.x + current.width), 0);
+                        item.x = Math.max(wrap.clientWidth + 4, rightMost + gap);
                     }
-                    item.x = x;
                     item.el.style.left = `${item.x}px`;
                 });
 
